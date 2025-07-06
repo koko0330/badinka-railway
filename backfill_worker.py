@@ -12,7 +12,8 @@ reddit = praw.Reddit(
 )
 
 # === Config ===
-KEYWORD_PATTERN = re.compile(r'[@#]?\b?badinka(?:\.com)?\b?', re.IGNORECASE)
+KEYWORD = "badinka"
+KEYWORD_PATTERN = re.compile(r'[@#]?\b(badinka)(?:\.com)?\b', re.IGNORECASE)
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
 TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
 
