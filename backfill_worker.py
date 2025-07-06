@@ -14,7 +14,7 @@ reddit = praw.Reddit(
 
 # === Config ===
 KEYWORD = "badinka"
-KEYWORD_PATTERN = re.compile(r'[@#]?\b?badinka\b?(?:\.com)?', re.IGNORECASE)
+re.compile(r'[@#]?\b(badinka)(\.com)?\b', re.IGNORECASE)
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
 
 # Track seen results to avoid resending
