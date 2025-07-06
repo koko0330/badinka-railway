@@ -2,10 +2,9 @@ import praw
 import os
 import re
 import requests
-import time
 from datetime import datetime, timezone
 
-# === Reddit API ===
+# === Reddit API Setup ===
 reddit = praw.Reddit(
     client_id="z12aa_E8kaHr_vC9LL6xCw",
     client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
@@ -13,22 +12,10 @@ reddit = praw.Reddit(
 )
 
 # === Config ===
-KEYWORD = "badinka"
-KEYWORD_PATTERN = re.compile(r'(?:@|#)?\bBadinka(?:\.com)?\b', re.IGNORECASE)
+KEYWORD_PATTERN = re.compile(r'[@#]?(badinka)(?:\.com)?', re.IGNORECASE)
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
 
-# Track seen results to avoid resending
-SEEN_IDS_FILE = "seen_ids.txt"
-seen_ids = set()
-
-if os.path.exists(SEEN_IDS_FILE):
-    with open(SEEN_IDS_FILE, "r") as f:
-        seen_ids = set(line.strip() for line in f)
-
-def save_seen_ids():
-    with open(SEEN_IDS_FILE, "w") as f:
-        for _id in seen_ids:
-            f.write(_id + "\n")
+seen_ids = set()  # In-memory deduplication only for the current run
 
 def extract_comment(comment):
     return {
@@ -44,30 +31,53 @@ def extract_comment(comment):
         "parent_id": comment.parent_id
     }
 
+def extract_post(submission):
+    return {
+        "type": "post",
+        "id": submission.id,
+        "title": submission.title,
+        "body": submission.selftext,
+        "permalink": f"https://reddit.com{submission.permalink}",
+        "created": datetime.fromtimestamp(submission.created_utc, tz=timezone.utc).isoformat(),
+        "subreddit": str(submission.subreddit),
+        "author": str(submission.author),
+        "score": submission.score
+    }
+
 def main():
     new_mentions = []
 
-    print("🔍 Polling Reddit search for recent comments with keyword...")
+    print("🔍 Searching Reddit for recent posts and comments...")
 
-    for comment in reddit.subreddit("all").search(KEYWORD, sort="new", syntax="lucene", time_filter="day"):
-        if comment.id not in seen_ids and hasattr(comment, "body"):
-            if KEYWORD_PATTERN.search(comment.body):
-                data = extract_comment(comment)
-                new_mentions.append(data)
-                seen_ids.add(comment.id)
-                print(f"📥 Found: {data['permalink']}")
+    # Search both posts and comments using the Reddit search API
+    for item in reddit.subreddit("all").search("badinka", sort="new", syntax="lucene", time_filter="day"):
+        if item.id not in seen_ids:
+            try:
+                if hasattr(item, "body"):
+                    if KEYWORD_PATTERN.search(item.body):
+                        data = extract_comment(item)
+                        new_mentions.append(data)
+                        print(f"💬 Comment match: {data['permalink']}")
+                elif hasattr(item, "title") and hasattr(item, "selftext"):
+                    combined = f"{item.title} {item.selftext or ''}"
+                    if KEYWORD_PATTERN.search(combined):
+                        data = extract_post(item)
+                        new_mentions.append(data)
+                        print(f"🧵 Post match: {data['permalink']}")
+                seen_ids.add(item.id)
+            except Exception as e:
+                print(f"⚠️ Skipping item due to error: {e}")
 
+    # Send matches to dashboard
     if new_mentions:
         try:
             response = requests.post(DASHBOARD_URL, json=new_mentions)
             if response.ok:
-                print(f"✅ Sent {len(new_mentions)} new mentions to dashboard")
+                print(f"✅ Sent {len(new_mentions)} new mentions to dashboard.")
             else:
                 print(f"❌ Failed to send data: {response.status_code}")
         except Exception as e:
-            print(f"❌ Error sending data: {e}")
-
-        save_seen_ids()
+            print(f"❌ Error during dashboard sync: {e}")
     else:
         print("ℹ️ No new mentions found.")
 
