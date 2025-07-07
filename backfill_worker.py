@@ -1,9 +1,8 @@
 import praw
 import os
 import re
-import requests
 from datetime import datetime, timezone
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from textblob import TextBlob
 from shared_config import insert_mention
 
 # === Reddit API ===
@@ -13,41 +12,31 @@ reddit = praw.Reddit(
     user_agent="BrandMentionBackfill/0.1 by ConfectionInfamous97"
 )
 
-# === Config ===
-KEYWORD = "badinka"
-KEYWORD_PATTERN = re.compile(r'[@#]?\b(badinka)(?:\.com)?\b', re.IGNORECASE)
-DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
+BRANDS = {
+    "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
+    "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
+}
+
 TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
 
-# === In-memory seen cache ===
 seen_ids = set()
 new_mentions = []
 
-# === Sentiment Analysis ===
-analyzer = SentimentIntensityAnalyzer()
-
 def analyze_sentiment(text):
     try:
-        vs = analyzer.polarity_scores(text)
-        if vs["compound"] >= 0.05:
-            return "positive"
-        elif vs["compound"] <= -0.05:
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity
+        if polarity < 0.1:
             return "negative"
-        else:
+        elif polarity < 0.4:
             return "neutral"
+        else:
+            return "positive"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
-        return "neutral"
+        return "positive"
 
-def send_to_dashboard(data):
-    try:
-        insert_mention(data)
-        print(f"✅ Stored {len(data)} mentions in DB.")
-    except Exception as e:
-        print(f"❌ Failed to store in DB: {e}")
-
-
-def extract_post(post):
+def extract_post(post, brand):
     text = f"{post.title or ''} {post.selftext or ''}"
     return {
         "type": "post",
@@ -59,10 +48,11 @@ def extract_post(post):
         "subreddit": str(post.subreddit),
         "author": str(post.author),
         "score": post.score,
-        "sentiment": analyze_sentiment(text)
+        "sentiment": analyze_sentiment(text),
+        "brand": brand
     }
 
-def extract_comment(comment):
+def extract_comment(comment, brand):
     return {
         "type": "comment",
         "id": comment.id,
@@ -74,34 +64,47 @@ def extract_comment(comment):
         "score": comment.score,
         "link_id": comment.link_id,
         "parent_id": comment.parent_id,
-        "sentiment": analyze_sentiment(comment.body)
+        "sentiment": analyze_sentiment(comment.body),
+        "brand": brand
     }
+
+def find_brands(text):
+    found_brands = []
+    for brand, pattern in BRANDS.items():
+        if pattern.search(text):
+            found_brands.append(brand)
+    return found_brands
 
 def backfill():
     print("🔁 Backfilling posts...")
-    for post in reddit.subreddit("all").search("trump", sort="new", time_filter=TIME_FILTER):
-        if post.id not in seen_ids:
-            text = f"{post.title or ''} {post.selftext or ''}"
-            if KEYWORD_PATTERN.search(text):
-                data = extract_post(post)
-                new_mentions.append(data)
-                seen_ids.add(post.id)
-                print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
+    for brand, pattern in BRANDS.items():
+        for post in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
+            if post.id not in seen_ids:
+                text = f"{post.title or ''} {post.selftext or ''}"
+                if pattern.search(text):
+                    new_mentions.append(extract_post(post, brand))
+                    seen_ids.add(post.id)
+                    print(f"🧵 Post: {post.permalink} | Brand: {brand}")
 
     print("🔁 Backfilling comments...")
-    for comment in reddit.subreddit("all").search("trump", sort="new", time_filter=TIME_FILTER):
-        if comment.id not in seen_ids and hasattr(comment, "body"):
-            if KEYWORD_PATTERN.search(comment.body or ""):
-                data = extract_comment(comment)
-                new_mentions.append(data)
-                seen_ids.add(comment.id)
-                print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
+    for brand, pattern in BRANDS.items():
+        for comment in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
+            if comment.id not in seen_ids and hasattr(comment, "body"):
+                if pattern.search(comment.body or ""):
+                    new_mentions.append(extract_comment(comment, brand))
+                    seen_ids.add(comment.id)
+                    print(f"💬 Comment: {comment.permalink} | Brand: {brand}")
 
     if new_mentions:
-        send_to_dashboard(new_mentions)
+        try:
+            insert_mention(new_mentions)
+            print(f"✅ Stored {len(new_mentions)} mentions in DB.")
+        except Exception as e:
+            print(f"❌ Failed to store in DB: {e}")
     else:
         print("ℹ️ No new mentions found.")
 
 if __name__ == "__main__":
     print("📦 Starting backfill...")
     backfill()
+
