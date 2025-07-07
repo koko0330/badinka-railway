@@ -17,7 +17,7 @@ reddit = praw.Reddit(
 # === Config ===
 BRANDS = {
     "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
-    "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
+    "iheartraves": re.compile(r'[@#]?biden(?:\.com)?', re.IGNORECASE),
 }
 
 SEEN_IDS = set()
