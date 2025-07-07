@@ -4,6 +4,7 @@ import re
 import os
 import requests
 from datetime import datetime, timezone
+from textblob import TextBlob
 
 # === Reddit API Credentials from Railway Variables ===
 reddit = praw.Reddit(
@@ -21,6 +22,19 @@ DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender
 
 print("🚀 Reddit monitor started...")
 
+# === Sentiment Analysis ===
+def analyze_sentiment(text):
+    try:
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity
+        if polarity < -0.2:
+            return "negative"
+        else:
+            return "positive"
+    except Exception as e:
+        print(f"Sentiment analysis failed: {e}")
+        return "positive"  # fallback
+
 def send_to_dashboard(data):
     try:
         response = requests.post(DASHBOARD_URL, json=data)
@@ -32,6 +46,7 @@ def send_to_dashboard(data):
         print(f"❌ Exception during sync: {e}")
 
 def extract_post(submission):
+    text = f"{submission.title} {submission.selftext}"
     return {
         "type": "post",
         "id": submission.id,
@@ -41,7 +56,8 @@ def extract_post(submission):
         "created": datetime.fromtimestamp(submission.created_utc, tz=timezone.utc).isoformat(),
         "subreddit": str(submission.subreddit),
         "author": str(submission.author),
-        "score": submission.score
+        "score": submission.score,
+        "sentiment": analyze_sentiment(text)
     }
 
 def extract_comment(comment):
@@ -55,7 +71,8 @@ def extract_comment(comment):
         "author": str(comment.author),
         "score": comment.score,
         "link_id": comment.link_id,
-        "parent_id": comment.parent_id
+        "parent_id": comment.parent_id,
+        "sentiment": analyze_sentiment(comment.body)
     }
 
 def main():
@@ -76,7 +93,7 @@ def main():
                     data = extract_post(post)
                     COLLECTED.append(data)
                     SEEN_IDS.add(post.id)
-                    print(f"🧵 Post: {data['permalink']}")
+                    print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
         except Exception:
             pass
 
@@ -87,7 +104,7 @@ def main():
                     data = extract_comment(comment)
                     COLLECTED.append(data)
                     SEEN_IDS.add(comment.id)
-                    print(f"💬 Comment: {data['permalink']}")
+                    print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
         except Exception:
             pass
 
