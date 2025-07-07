@@ -3,7 +3,8 @@ import os
 import re
 import requests
 from datetime import datetime, timezone
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from scipy.special import softmax
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -13,25 +14,25 @@ reddit = praw.Reddit(
 )
 
 # === Config ===
-KEYWORD = "badinka"
-KEYWORD_PATTERN = re.compile(r'[@#]?\b(badinka)(?:\.com)?\b', re.IGNORECASE)
+KEYWORD = "trump"
+KEYWORD_PATTERN = re.compile(r'[@#]?\b(trump)(?:\.com)?\b', re.IGNORECASE)
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
-TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
+TIME_FILTER = "day"
 
-# === In-memory seen cache ===
-seen_ids = set()
-new_mentions = []
-
-# === VADER Sentiment Analyzer ===
-analyzer = SentimentIntensityAnalyzer()
+# === Transformers Sentiment Model ===
+tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
+model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
 
 def analyze_sentiment(text):
     try:
-        vs = analyzer.polarity_scores(text)
-        return "negative" if vs["compound"] < 0.2 else "positive"
+        encoded_input = tokenizer(text, return_tensors='pt', truncation=True)
+        output = model(**encoded_input)
+        scores = softmax(output.logits.detach().numpy()[0])
+        labels = ['negative', 'neutral', 'positive']
+        return labels[scores.argmax()]
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
-        return "positive"
+        return "neutral"
 
 def send_to_dashboard(data):
     try:
@@ -74,6 +75,9 @@ def extract_comment(comment):
     }
 
 def backfill():
+    seen_ids = set()
+    new_mentions = []
+
     print("🔁 Backfilling posts...")
     for post in reddit.subreddit("all").search("badinka", sort="new", time_filter=TIME_FILTER):
         if post.id not in seen_ids:
@@ -85,19 +89,4 @@ def backfill():
                 print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
 
     print("🔁 Backfilling comments...")
-    for comment in reddit.subreddit("all").search("badinka", sort="new", time_filter=TIME_FILTER):
-        if comment.id not in seen_ids and hasattr(comment, "body"):
-            if KEYWORD_PATTERN.search(comment.body or ""):
-                data = extract_comment(comment)
-                new_mentions.append(data)
-                seen_ids.add(comment.id)
-                print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
-
-    if new_mentions:
-        send_to_dashboard(new_mentions)
-    else:
-        print("ℹ️ No new mentions found.")
-
-if __name__ == "__main__":
-    print("📦 Starting backfill...")
-    backfill()
+    for comment in reddit.subreddit("all").search("badinka", sort="new", time_filter=TIME_FILTER)
