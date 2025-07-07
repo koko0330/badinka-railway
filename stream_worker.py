@@ -4,7 +4,7 @@ import re
 import os
 import requests
 from datetime import datetime, timezone
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from textblob import TextBlob
 from shared_config import insert_mention
 
 # === Reddit API Credentials from Railway Variables ===
@@ -15,37 +15,32 @@ reddit = praw.Reddit(
 )
 
 # === Config ===
-KEYWORD_PATTERN = re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE)
+BRANDS = {
+    "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
+    "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
+}
+
 SEEN_IDS = set()
 COLLECTED = []
 POST_INTERVAL = 60  # seconds
-DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
 
-# === Sentiment Analyzer ===
-analyzer = SentimentIntensityAnalyzer()
+print("🚀 Reddit monitor started...")
 
 def analyze_sentiment(text):
     try:
-        vs = analyzer.polarity_scores(text)
-        if vs["compound"] >= 0.05:
-            return "positive"
-        elif vs["compound"] <= -0.05:
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity
+        if polarity < 0.1:
             return "negative"
-        else:
+        elif polarity < 0.4:
             return "neutral"
+        else:
+            return "positive"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
-        return "neutral"
+        return "positive"
 
-def send_to_dashboard(data):
-    try:
-        insert_mention(data)
-        print(f"✅ Stored {len(data)} mentions in DB.")
-    except Exception as e:
-        print(f"❌ Failed to store in DB: {e}")
-
-
-def extract_post(submission):
+def extract_post(submission, brand):
     text = f"{submission.title} {submission.selftext}"
     return {
         "type": "post",
@@ -57,10 +52,11 @@ def extract_post(submission):
         "subreddit": str(submission.subreddit),
         "author": str(submission.author),
         "score": submission.score,
-        "sentiment": analyze_sentiment(text)
+        "sentiment": analyze_sentiment(text),
+        "brand": brand
     }
 
-def extract_comment(comment):
+def extract_comment(comment, brand):
     return {
         "type": "comment",
         "id": comment.id,
@@ -72,8 +68,16 @@ def extract_comment(comment):
         "score": comment.score,
         "link_id": comment.link_id,
         "parent_id": comment.parent_id,
-        "sentiment": analyze_sentiment(comment.body)
+        "sentiment": analyze_sentiment(comment.body),
+        "brand": brand
     }
+
+def find_brands(text):
+    found_brands = []
+    for brand, pattern in BRANDS.items():
+        if pattern.search(text):
+            found_brands.append(brand)
+    return found_brands
 
 def main():
     subreddit = reddit.subreddit("all")
@@ -89,30 +93,35 @@ def main():
             post = next(post_stream)
             if post.id not in SEEN_IDS:
                 text = f"{post.title} {post.selftext}"
-                if KEYWORD_PATTERN.search(text):
-                    data = extract_post(post)
+                brands_found = find_brands(text)
+                for brand in brands_found:
+                    data = extract_post(post, brand)
                     COLLECTED.append(data)
                     SEEN_IDS.add(post.id)
-                    print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
+                    print(f"🧵 Post: {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
         except Exception:
             pass
 
         try:
             comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
-                if KEYWORD_PATTERN.search(comment.body):
-                    data = extract_comment(comment)
+                brands_found = find_brands(comment.body)
+                for brand in brands_found:
+                    data = extract_comment(comment, brand)
                     COLLECTED.append(data)
                     SEEN_IDS.add(comment.id)
-                    print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
+                    print(f"💬 Comment: {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
         except Exception:
             pass
 
         if now - last_push > POST_INTERVAL and COLLECTED:
-            send_to_dashboard(COLLECTED)
-            COLLECTED.clear()
-            last_push = now
+            try:
+                insert_mention(COLLECTED)
+                print(f"✅ Stored {len(COLLECTED)} mentions in DB.")
+                COLLECTED.clear()
+                last_push = now
+            except Exception as e:
+                print(f"❌ Failed to store in DB: {e}")
 
 if __name__ == "__main__":
-    print("🚀 Reddit monitor started...")
     main()
