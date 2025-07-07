@@ -4,8 +4,7 @@ import re
 import os
 import requests
 from datetime import datetime, timezone
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from scipy.special import softmax
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # === Reddit API Credentials from Railway Variables ===
 reddit = praw.Reddit(
@@ -18,20 +17,21 @@ reddit = praw.Reddit(
 KEYWORD_PATTERN = re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE)
 SEEN_IDS = set()
 COLLECTED = []
-POST_INTERVAL = 60
+POST_INTERVAL = 60  # seconds
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
 
-# === Transformers Sentiment Model ===
-tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
-model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
+# === Sentiment Analyzer ===
+analyzer = SentimentIntensityAnalyzer()
 
 def analyze_sentiment(text):
     try:
-        encoded_input = tokenizer(text, return_tensors='pt', truncation=True)
-        output = model(**encoded_input)
-        scores = softmax(output.logits.detach().numpy()[0])
-        labels = ['negative', 'neutral', 'positive']
-        return labels[scores.argmax()]
+        vs = analyzer.polarity_scores(text)
+        if vs["compound"] >= 0.05:
+            return "positive"
+        elif vs["compound"] <= -0.05:
+            return "negative"
+        else:
+            return "neutral"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
         return "neutral"
@@ -115,4 +115,5 @@ def main():
             last_push = now
 
 if __name__ == "__main__":
+    print("🚀 Reddit monitor started...")
     main()
