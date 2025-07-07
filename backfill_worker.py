@@ -90,5 +90,5 @@ def backfill():
     send_to_dashboard(new_mentions) if new_mentions else print("\u2139\ufe0f No new mentions.")
 
 if __name__ == "__main__":
-    print("\ud83d\udce6 Starting backfill...")
+    print("Starting backfill...")
     backfill()
