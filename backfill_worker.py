@@ -3,6 +3,7 @@ import os
 import re
 import requests
 from datetime import datetime, timezone
+from textblob import TextBlob
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -21,6 +22,19 @@ TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
 seen_ids = set()
 new_mentions = []
 
+# === Sentiment Analysis ===
+def analyze_sentiment(text):
+    try:
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity
+        if polarity < -0.2:
+            return "negative"
+        else:
+            return "positive"
+    except Exception as e:
+        print(f"Sentiment analysis failed: {e}")
+        return "positive"  # fallback
+
 def send_to_dashboard(data):
     try:
         response = requests.post(DASHBOARD_URL, json=data)
@@ -32,6 +46,7 @@ def send_to_dashboard(data):
         print(f"❌ Error sending data: {e}")
 
 def extract_post(post):
+    text = f"{post.title or ''} {post.selftext or ''}"
     return {
         "type": "post",
         "id": post.id,
@@ -41,7 +56,8 @@ def extract_post(post):
         "created": datetime.fromtimestamp(post.created_utc, tz=timezone.utc).isoformat(),
         "subreddit": str(post.subreddit),
         "author": str(post.author),
-        "score": post.score
+        "score": post.score,
+        "sentiment": analyze_sentiment(text)
     }
 
 def extract_comment(comment):
@@ -55,7 +71,8 @@ def extract_comment(comment):
         "author": str(comment.author),
         "score": comment.score,
         "link_id": comment.link_id,
-        "parent_id": comment.parent_id
+        "parent_id": comment.parent_id,
+        "sentiment": analyze_sentiment(comment.body)
     }
 
 def backfill():
@@ -64,17 +81,19 @@ def backfill():
         if post.id not in seen_ids:
             text = f"{post.title or ''} {post.selftext or ''}"
             if KEYWORD_PATTERN.search(text):
-                new_mentions.append(extract_post(post))
+                data = extract_post(post)
+                new_mentions.append(data)
                 seen_ids.add(post.id)
-                print(f"🧵 Post: {post.permalink}")
+                print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
 
     print("🔁 Backfilling comments...")
     for comment in reddit.subreddit("all").search("badinka", sort="new", time_filter=TIME_FILTER):
         if comment.id not in seen_ids and hasattr(comment, "body"):
             if KEYWORD_PATTERN.search(comment.body or ""):
-                new_mentions.append(extract_comment(comment))
+                data = extract_comment(comment)
+                new_mentions.append(data)
                 seen_ids.add(comment.id)
-                print(f"💬 Comment: {comment.permalink}")
+                print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
 
     if new_mentions:
         send_to_dashboard(new_mentions)
