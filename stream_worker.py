@@ -34,9 +34,9 @@ def analyze_sentiment(text):
 def send_to_dashboard(data):
     try:
         response = requests.post(DASHBOARD_URL, json=data)
-        print(f"\u2705 Synced {len(data)} mentions." if response.ok else f"\u274c Sync failed: {response.status_code}")
+        print(f"Synced {len(data)} mentions." if response.ok else f"Sync failed: {response.status_code}")
     except Exception as e:
-        print(f"\u274c Sync error: {e}")
+        print(f"Sync error: {e}")
 
 def extract_post(post):
     text = f"{post.title or ''} {post.selftext or ''}"
