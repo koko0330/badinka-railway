@@ -4,7 +4,7 @@ import re
 import os
 import requests
 from datetime import datetime, timezone
-from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # === Reddit API Credentials from Railway Variables ===
 reddit = praw.Reddit(
@@ -22,15 +22,13 @@ DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender
 
 print("🚀 Reddit monitor started...")
 
-# === Sentiment Analysis ===
+# === VADER Sentiment Analyzer ===
+analyzer = SentimentIntensityAnalyzer()
+
 def analyze_sentiment(text):
     try:
-        blob = TextBlob(text)
-        polarity = blob.sentiment.polarity
-        if polarity < 0.1:
-            return "negative"
-        else:
-            return "positive"
+        vs = analyzer.polarity_scores(text)
+        return "negative" if vs["compound"] < -0.1 else "positive"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
         return "positive"
