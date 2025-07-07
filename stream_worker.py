@@ -15,7 +15,7 @@ reddit = praw.Reddit(
 )
 
 # === Config ===
-KEYWORD_PATTERN = re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE)
+KEYWORD_PATTERN = re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE)
 SEEN_IDS = set()
 COLLECTED = []
 POST_INTERVAL = 60  # seconds
