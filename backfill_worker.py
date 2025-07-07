@@ -31,9 +31,9 @@ def analyze_sentiment(text):
 def send_to_dashboard(data):
     try:
         response = requests.post(DASHBOARD_URL, json=data)
-        print(f"\u2705 Sent {len(data)} mentions" if response.ok else f"\u274c Failed: {response.status_code}")
+        print(f"Sent {len(data)} mentions" if response.ok else f"Failed: {response.status_code}")
     except Exception as e:
-        print(f"\u274c Error: {e}")
+        print(f"Error: {e}")
 
 def extract_post(post):
     text = f"{post.title or ''} {post.selftext or ''}"
@@ -70,7 +70,7 @@ def extract_comment(comment):
     }
 
 def backfill():
-    print("\ud83d\udd01 Backfilling posts...")
+    print("Backfilling posts...")
     for post in reddit.subreddit("all").search("trump", sort="new", time_filter=TIME_FILTER):
         if post.id not in seen_ids:
             text = f"{post.title or ''} {post.selftext or ''}"
@@ -79,7 +79,7 @@ def backfill():
                 new_mentions.append(data)
                 seen_ids.add(post.id)
 
-    print("\ud83d\udd01 Backfilling comments...")
+    print("Backfilling comments...")
     for comment in reddit.subreddit("all").search("trump", sort="new", time_filter=TIME_FILTER):
         if comment.id not in seen_ids and hasattr(comment, "body"):
             if KEYWORD_PATTERN.search(comment.body or ""):
@@ -87,7 +87,7 @@ def backfill():
                 new_mentions.append(data)
                 seen_ids.add(comment.id)
 
-    send_to_dashboard(new_mentions) if new_mentions else print("\u2139\ufe0f No new mentions.")
+    send_to_dashboard(new_mentions) if new_mentions else print("No new mentions.")
 
 if __name__ == "__main__":
     print("Starting backfill...")
