@@ -28,7 +28,7 @@ analyzer = SentimentIntensityAnalyzer()
 def analyze_sentiment(text):
     try:
         vs = analyzer.polarity_scores(text)
-        return "negative" if vs["compound"] < -0.1 else "positive"
+        return "negative" if vs["compound"] < 0.2 else "positive"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
         return "positive"
