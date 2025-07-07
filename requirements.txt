@@ -1,5 +1,3 @@
 praw
 requests
-transformers
-torch
-scipy
+vaderSentiment
