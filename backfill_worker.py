@@ -3,7 +3,7 @@ import os
 import re
 import requests
 from datetime import datetime, timezone
-from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -22,15 +22,13 @@ TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
 seen_ids = set()
 new_mentions = []
 
-# === Sentiment Analysis ===
+# === VADER Sentiment Analyzer ===
+analyzer = SentimentIntensityAnalyzer()
+
 def analyze_sentiment(text):
     try:
-        blob = TextBlob(text)
-        polarity = blob.sentiment.polarity
-        if polarity < 0.1:
-            return "negative"
-        else:
-            return "positive"
+        vs = analyzer.polarity_scores(text)
+        return "negative" if vs["compound"] < -0.1 else "positive"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
         return "positive"
