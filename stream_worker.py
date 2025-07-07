@@ -27,15 +27,13 @@ def analyze_sentiment(text):
     try:
         blob = TextBlob(text)
         polarity = blob.sentiment.polarity
-
-        # Adjusted thresholds for better separation
-        if polarity <= -0.1:
+        if polarity < 0.1:
             return "negative"
         else:
             return "positive"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
-        return "positive"  # fallback
+        return "positive"
 
 def send_to_dashboard(data):
     try:
