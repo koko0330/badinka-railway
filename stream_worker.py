@@ -5,6 +5,7 @@ import os
 import requests
 from datetime import datetime, timezone
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from shared_config import insert_mention
 
 # === Reddit API Credentials from Railway Variables ===
 reddit = praw.Reddit(
@@ -38,13 +39,11 @@ def analyze_sentiment(text):
 
 def send_to_dashboard(data):
     try:
-        response = requests.post(DASHBOARD_URL, json=data)
-        if response.ok:
-            print(f"✅ Synced {len(data)} mentions to dashboard.")
-        else:
-            print(f"❌ Sync failed: {response.status_code}")
+        insert_mention(data)
+        print(f"✅ Stored {len(data)} mentions in DB.")
     except Exception as e:
-        print(f"❌ Exception during sync: {e}")
+        print(f"❌ Failed to store in DB: {e}")
+
 
 def extract_post(submission):
     text = f"{submission.title} {submission.selftext}"
