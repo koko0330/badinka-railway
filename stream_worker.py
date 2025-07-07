@@ -6,57 +6,62 @@ import requests
 from datetime import datetime, timezone
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+# === Reddit API Credentials from Railway Variables ===
 reddit = praw.Reddit(
     client_id="z12aa_E8kaHr_vC9LL6xCw",
     client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
     user_agent="BrandMentionBot/0.1 by ConfectionInfamous97"
 )
 
-KEYWORD_PATTERN = re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE)
+# === Config ===
+KEYWORD_PATTERN = re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE)
 SEEN_IDS = set()
 COLLECTED = []
-POST_INTERVAL = 60
+POST_INTERVAL = 60  # seconds
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
 
+# === Sentiment Analyzer ===
 analyzer = SentimentIntensityAnalyzer()
-
-print("Reddit monitor started...")
 
 def analyze_sentiment(text):
     try:
         vs = analyzer.polarity_scores(text)
-        c = vs["compound"]
-        return "positive" if c >= 0.05 else "negative" if c <= -0.05 else "neutral"
+        if vs["compound"] >= 0.05:
+            return "positive"
+        elif vs["compound"] <= -0.05:
+            return "negative"
+        else:
+            return "neutral"
     except Exception as e:
-        print(f"Sentiment failed: {e}")
+        print(f"Sentiment analysis failed: {e}")
         return "neutral"
 
 def send_to_dashboard(data):
     try:
         response = requests.post(DASHBOARD_URL, json=data)
-        print(f"Synced {len(data)} mentions." if response.ok else f"Sync failed: {response.status_code}")
+        if response.ok:
+            print(f"✅ Synced {len(data)} mentions to dashboard.")
+        else:
+            print(f"❌ Sync failed: {response.status_code}")
     except Exception as e:
-        print(f"Sync error: {e}")
+        print(f"❌ Exception during sync: {e}")
 
-def extract_post(post):
-    text = f"{post.title or ''} {post.selftext or ''}"
-    match = KEYWORD_PATTERN.search(text)
+def extract_post(submission):
+    text = f"{submission.title} {submission.selftext}"
     return {
         "type": "post",
-        "id": post.id,
-        "title": post.title,
-        "body": post.selftext,
-        "permalink": f"https://reddit.com{post.permalink}",
-        "created": datetime.fromtimestamp(post.created_utc, tz=timezone.utc).isoformat(),
-        "subreddit": str(post.subreddit),
-        "author": str(post.author),
-        "score": post.score,
-        "sentiment": analyze_sentiment(text),
-        "matched_keyword": match.group(0) if match else ""
+        "id": submission.id,
+        "title": submission.title,
+        "body": submission.selftext,
+        "permalink": f"https://reddit.com{submission.permalink}",
+        "created": datetime.fromtimestamp(submission.created_utc, tz=timezone.utc).isoformat(),
+        "subreddit": str(submission.subreddit),
+        "author": str(submission.author),
+        "score": submission.score,
+        "sentiment": analyze_sentiment(text)
     }
 
 def extract_comment(comment):
-    match = KEYWORD_PATTERN.search(comment.body or "")
     return {
         "type": "comment",
         "id": comment.id,
@@ -68,8 +73,7 @@ def extract_comment(comment):
         "score": comment.score,
         "link_id": comment.link_id,
         "parent_id": comment.parent_id,
-        "sentiment": analyze_sentiment(comment.body),
-        "matched_keyword": match.group(0) if match else ""
+        "sentiment": analyze_sentiment(comment.body)
     }
 
 def main():
@@ -81,6 +85,7 @@ def main():
 
     while True:
         now = time.time()
+
         try:
             post = next(post_stream)
             if post.id not in SEEN_IDS:
@@ -89,6 +94,7 @@ def main():
                     data = extract_post(post)
                     COLLECTED.append(data)
                     SEEN_IDS.add(post.id)
+                    print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
         except Exception:
             pass
 
@@ -99,6 +105,7 @@ def main():
                     data = extract_comment(comment)
                     COLLECTED.append(data)
                     SEEN_IDS.add(comment.id)
+                    print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
         except Exception:
             pass
 
@@ -108,4 +115,5 @@ def main():
             last_push = now
 
 if __name__ == "__main__":
+    print("🚀 Reddit monitor started...")
     main()
