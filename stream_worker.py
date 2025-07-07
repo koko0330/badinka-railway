@@ -20,7 +20,7 @@ DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender
 
 analyzer = SentimentIntensityAnalyzer()
 
-print("\ud83d\ude80 Reddit monitor started...")
+print("Reddit monitor started...")
 
 def analyze_sentiment(text):
     try:
