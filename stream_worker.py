@@ -4,7 +4,7 @@ import re
 import os
 import requests
 from datetime import datetime, timezone
-from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from shared_config import insert_mention
 
 # === Reddit API Credentials from Railway Variables ===
@@ -26,19 +26,21 @@ POST_INTERVAL = 60  # seconds
 
 print("🚀 Reddit monitor started...")
 
+# === Sentiment Analysis ===
+analyzer = SentimentIntensityAnalyzer()
+
 def analyze_sentiment(text):
     try:
-        blob = TextBlob(text)
-        polarity = blob.sentiment.polarity
-        if polarity < 0.1:
-            return "negative"
-        elif polarity < 0.4:
-            return "neutral"
-        else:
+        vs = analyzer.polarity_scores(text)
+        if vs["compound"] >= 0.05:
             return "positive"
+        elif vs["compound"] <= -0.05:
+            return "negative"
+        else:
+            return "neutral"
     except Exception as e:
         print(f"Sentiment analysis failed: {e}")
-        return "positive"
+        return "neutral"
 
 def extract_post(submission, brand):
     text = f"{submission.title} {submission.selftext}"
