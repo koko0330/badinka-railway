@@ -2,8 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import execute_values
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-print(f"DEBUG: DATABASE_URL='{DATABASE_URL}'")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 def insert_mention(data_list):
     if not data_list:
@@ -23,14 +22,16 @@ def insert_mention(data_list):
             item["subreddit"],
             item["author"],
             item["score"],
-            item["sentiment"]
+            item["sentiment"],
+            item["brand"]
         )
         for item in data_list
     ]
 
     query = """
-        INSERT INTO mentions (id, type, title, body, permalink, created, subreddit, author, score, sentiment)
-        VALUES %s
+        INSERT INTO mentions (
+            id, type, title, body, permalink, created, subreddit, author, score, sentiment, brand
+        ) VALUES %s
         ON CONFLICT (id) DO NOTHING;
     """
 
