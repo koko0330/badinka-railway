@@ -4,6 +4,7 @@ import re
 import requests
 from datetime import datetime, timezone
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from shared_config import insert_mention
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -40,13 +41,11 @@ def analyze_sentiment(text):
 
 def send_to_dashboard(data):
     try:
-        response = requests.post(DASHBOARD_URL, json=data)
-        if response.ok:
-            print(f"✅ Sent {len(data)} new mentions to dashboard")
-        else:
-            print(f"❌ Failed to send data: {response.status_code}")
+        insert_mention(data)
+        print(f"✅ Stored {len(data)} mentions in DB.")
     except Exception as e:
-        print(f"❌ Error sending data: {e}")
+        print(f"❌ Failed to store in DB: {e}")
+
 
 def extract_post(post):
     text = f"{post.title or ''} {post.selftext or ''}"
