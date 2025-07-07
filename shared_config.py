@@ -2,7 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import execute_values
 
-DATABASE_URL = os.getenv("postgresql://reddit_mentions_db_user:Lq2m8OwpYXH8DnTIJW6aiLqBJSLt9pGR@dpg-d1lrk9ffte5s73dsqc70-a.oregon-postgres.render.com/reddit_mentions_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def insert_mention(data_list):
     if not data_list:
