@@ -5,39 +5,51 @@ import requests
 from datetime import datetime, timezone
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+# === Reddit API ===
 reddit = praw.Reddit(
     client_id="z12aa_E8kaHr_vC9LL6xCw",
     client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
     user_agent="BrandMentionBackfill/0.1 by ConfectionInfamous97"
 )
 
-KEYWORD_PATTERN = re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE)
+# === Config ===
+KEYWORD = "badinka"
+KEYWORD_PATTERN = re.compile(r'[@#]?\b(badinka)(?:\.com)?\b', re.IGNORECASE)
 DASHBOARD_URL = os.getenv("RENDER_UPDATE_URL", "https://badinka-monitor.onrender.com/update")
-TIME_FILTER = "day"
+TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
+
+# === In-memory seen cache ===
 seen_ids = set()
 new_mentions = []
 
+# === Sentiment Analysis ===
 analyzer = SentimentIntensityAnalyzer()
 
 def analyze_sentiment(text):
     try:
         vs = analyzer.polarity_scores(text)
-        c = vs["compound"]
-        return "positive" if c >= 0.05 else "negative" if c <= -0.05 else "neutral"
+        if vs["compound"] >= 0.05:
+            return "positive"
+        elif vs["compound"] <= -0.05:
+            return "negative"
+        else:
+            return "neutral"
     except Exception as e:
-        print(f"Sentiment failed: {e}")
+        print(f"Sentiment analysis failed: {e}")
         return "neutral"
 
 def send_to_dashboard(data):
     try:
         response = requests.post(DASHBOARD_URL, json=data)
-        print(f"Sent {len(data)} mentions" if response.ok else f"Failed: {response.status_code}")
+        if response.ok:
+            print(f"✅ Sent {len(data)} new mentions to dashboard")
+        else:
+            print(f"❌ Failed to send data: {response.status_code}")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error sending data: {e}")
 
 def extract_post(post):
     text = f"{post.title or ''} {post.selftext or ''}"
-    match = KEYWORD_PATTERN.search(text)
     return {
         "type": "post",
         "id": post.id,
@@ -48,12 +60,10 @@ def extract_post(post):
         "subreddit": str(post.subreddit),
         "author": str(post.author),
         "score": post.score,
-        "sentiment": analyze_sentiment(text),
-        "matched_keyword": match.group(0) if match else ""
+        "sentiment": analyze_sentiment(text)
     }
 
 def extract_comment(comment):
-    match = KEYWORD_PATTERN.search(comment.body or "")
     return {
         "type": "comment",
         "id": comment.id,
@@ -65,12 +75,11 @@ def extract_comment(comment):
         "score": comment.score,
         "link_id": comment.link_id,
         "parent_id": comment.parent_id,
-        "sentiment": analyze_sentiment(comment.body),
-        "matched_keyword": match.group(0) if match else ""
+        "sentiment": analyze_sentiment(comment.body)
     }
 
 def backfill():
-    print("Backfilling posts...")
+    print("🔁 Backfilling posts...")
     for post in reddit.subreddit("all").search("trump", sort="new", time_filter=TIME_FILTER):
         if post.id not in seen_ids:
             text = f"{post.title or ''} {post.selftext or ''}"
@@ -78,17 +87,22 @@ def backfill():
                 data = extract_post(post)
                 new_mentions.append(data)
                 seen_ids.add(post.id)
+                print(f"🧵 Post: {data['permalink']} | Sentiment: {data['sentiment']}")
 
-    print("Backfilling comments...")
+    print("🔁 Backfilling comments...")
     for comment in reddit.subreddit("all").search("trump", sort="new", time_filter=TIME_FILTER):
         if comment.id not in seen_ids and hasattr(comment, "body"):
             if KEYWORD_PATTERN.search(comment.body or ""):
                 data = extract_comment(comment)
                 new_mentions.append(data)
                 seen_ids.add(comment.id)
+                print(f"💬 Comment: {data['permalink']} | Sentiment: {data['sentiment']}")
 
-    send_to_dashboard(new_mentions) if new_mentions else print("No new mentions.")
+    if new_mentions:
+        send_to_dashboard(new_mentions)
+    else:
+        print("ℹ️ No new mentions found.")
 
 if __name__ == "__main__":
-    print("Starting backfill...")
+    print("📦 Starting backfill...")
     backfill()
