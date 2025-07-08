@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 import requests
 from shared_config import insert_mention, get_existing_mention_ids
+from thread_rescanner import rescan_recent_threads
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -113,20 +114,19 @@ def crawl_post_and_comments(post, brand):
 
 
 def backfill():
-    print("🔁 Backfilling posts and full threads...")
+    print("🔁 Backfilling posts...")
     for brand, pattern in BRANDS.items():
         for post in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
             if post.id not in seen_ids:
-                mentions = crawl_post_and_comments(post, brand)
-                for mention in mentions:
-                    if mention["id"] not in seen_ids:
-                        new_mentions.append(mention)
-                        seen_ids.add(mention["id"])
-                        print(f"📥 {mention['type']}: {mention['permalink']} | Brand: {brand}")
+                text = f"{post.title or ''} {post.selftext or ''}"
+                if pattern.search(text):
+                    new_mentions.append(extract_post(post, brand))
+                    seen_ids.add(post.id)
+                    print(f"🧵 Post: {post.permalink} | Brand: {brand}")
 
-    print("🔁 Backfilling standalone comments...")
+    print("🔁 Backfilling comments...")
     for brand, pattern in BRANDS.items():
-        for comment in reddit.subreddit("all").comments(limit=500):
+        for comment in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
             if comment.id not in seen_ids and hasattr(comment, "body"):
                 if pattern.search(comment.body or ""):
                     new_mentions.append(extract_comment(comment, brand))
@@ -141,6 +141,13 @@ def backfill():
             print(f"❌ Failed to store in DB: {e}")
     else:
         print("ℹ️ No new mentions found.")
+
+    # 🧠 NEW: Rescan recent threads for new comments
+    print("🔄 Scanning previously stored threads for new comments...")
+    try:
+        rescan_recent_threads()
+    except Exception as e:
+        print(f"❌ Thread rescanning failed: {e}")
 
 
 if __name__ == "__main__":
