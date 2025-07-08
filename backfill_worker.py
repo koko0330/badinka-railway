@@ -23,7 +23,7 @@ seen_ids = set()
 new_mentions = []
 
 API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-sentiment-analysis"
-API_TOKEN = os.getenv("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")
+API_TOKEN = os.getenv("HF_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
 def analyze_sentiment(text):
