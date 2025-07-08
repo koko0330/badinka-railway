@@ -2,7 +2,7 @@ import praw
 import os
 import re
 from datetime import datetime, timezone
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import requests
 from shared_config import insert_mention
 
 # === Reddit API ===
@@ -22,20 +22,22 @@ TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
 seen_ids = set()
 new_mentions = []
 
-# === Sentiment Analysis ===
-analyzer = SentimentIntensityAnalyzer()
+API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-sentiment-analysis"
+API_TOKEN = os.getenv("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")
+HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
 def analyze_sentiment(text):
     try:
-        vs = analyzer.polarity_scores(text)
-        if vs["compound"] >= 0.05:
-            return "positive"
-        elif vs["compound"] <= -0.05:
-            return "negative"
-        else:
-            return "neutral"
+        payload = {"inputs": text}
+        response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        label = result[0].get("label", "neutral").lower()
+        if label in {"positive", "negative", "neutral"}:
+            return label
+        return "neutral"
     except Exception as e:
-        print(f"Sentiment analysis failed: {e}")
+        print(f"Sentiment API call failed: {e}")
         return "neutral"
 
 def extract_post(post, brand):
@@ -109,4 +111,3 @@ def backfill():
 if __name__ == "__main__":
     print("📦 Starting backfill...")
     backfill()
-
