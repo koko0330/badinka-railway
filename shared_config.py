@@ -4,6 +4,15 @@ from psycopg2.extras import execute_values
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
+def get_existing_mention_ids():
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM mentions")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return set(row[0] for row in rows)
+
 def insert_mention(data_list):
     if not data_list:
         return
