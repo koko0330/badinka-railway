@@ -1,4 +1,3 @@
 praw
 requests
 psycopg2-binary
-os
