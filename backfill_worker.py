@@ -27,22 +27,19 @@ API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-
 API_TOKEN = os.getenv("HF_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
+
 def analyze_sentiment(text):
     try:
         if not text or len(text.strip()) == 0:
             return "neutral"
-        # Optional: truncate very long text to avoid API issues
         max_length = 1000
         truncated_text = text[:max_length]
-
         payload = {"inputs": truncated_text}
         response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         response.raise_for_status()
         result = response.json()
-
         scores = result[0]
         top_label = max(scores, key=lambda x: x['score'])['label'].lower()
-
         if 'very positive' in top_label:
             return "positive"
         elif 'very negative' in top_label:
@@ -54,6 +51,7 @@ def analyze_sentiment(text):
     except Exception as e:
         print(f"Sentiment API call failed: {e}")
         return "neutral"
+
 
 def extract_post(post, brand):
     text = f"{post.title or ''} {post.selftext or ''}"
@@ -71,6 +69,7 @@ def extract_post(post, brand):
         "brand": brand
     }
 
+
 def extract_comment(comment, brand):
     return {
         "type": "comment",
@@ -87,6 +86,7 @@ def extract_comment(comment, brand):
         "brand": brand
     }
 
+
 def find_brands(text):
     found_brands = []
     for brand, pattern in BRANDS.items():
@@ -94,20 +94,39 @@ def find_brands(text):
             found_brands.append(brand)
     return found_brands
 
+
+def crawl_post_and_comments(post, brand):
+    mentions = []
+
+    if brand in find_brands(f"{post.title or ''} {post.selftext or ''}"):
+        mentions.append(extract_post(post, brand))
+
+    try:
+        post.comments.replace_more(limit=None)
+        for comment in post.comments.list():
+            if comment.id not in seen_ids and brand in find_brands(comment.body):
+                mentions.append(extract_comment(comment, brand))
+    except Exception as e:
+        print(f"⚠️ Failed to crawl comments for post {post.id}: {e}")
+
+    return mentions
+
+
 def backfill():
-    print("🔁 Backfilling posts...")
+    print("🔁 Backfilling posts and full threads...")
     for brand, pattern in BRANDS.items():
         for post in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
             if post.id not in seen_ids:
-                text = f"{post.title or ''} {post.selftext or ''}"
-                if pattern.search(text):
-                    new_mentions.append(extract_post(post, brand))
-                    seen_ids.add(post.id)
-                    print(f"🧵 Post: {post.permalink} | Brand: {brand}")
+                mentions = crawl_post_and_comments(post, brand)
+                for mention in mentions:
+                    if mention["id"] not in seen_ids:
+                        new_mentions.append(mention)
+                        seen_ids.add(mention["id"])
+                        print(f"📥 {mention['type']}: {mention['permalink']} | Brand: {brand}")
 
-    print("🔁 Backfilling comments...")
+    print("🔁 Backfilling standalone comments...")
     for brand, pattern in BRANDS.items():
-        for comment in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
+        for comment in reddit.subreddit("all").comments(limit=500):
             if comment.id not in seen_ids and hasattr(comment, "body"):
                 if pattern.search(comment.body or ""):
                     new_mentions.append(extract_comment(comment, brand))
@@ -123,6 +142,7 @@ def backfill():
     else:
         print("ℹ️ No new mentions found.")
 
+
 if __name__ == "__main__":
-    print("📦 Starting backfill...")
+    print("📦 Starting backfill with thread crawl...")
     backfill()
