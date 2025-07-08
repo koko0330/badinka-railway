@@ -15,7 +15,7 @@ reddit = praw.Reddit(
 
 # === Config ===
 BRANDS = {
-    "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
+    "badinka": re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE),
     "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
 }
 
@@ -31,19 +31,20 @@ HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
 def analyze_sentiment(text):
     try:
-        payload = {"inputs": text}
+        if not text or len(text.strip()) == 0:
+            return "neutral"
+        # Optional: truncate very long text to avoid API issues
+        max_length = 1000
+        truncated_text = text[:max_length]
+
+        payload = {"inputs": truncated_text}
         response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         response.raise_for_status()
         result = response.json()
-        print("API response:", result)  # for debugging
 
-        # result is a list of lists of dicts: get the inner list
-        scores = result[0]  # the first (and only) inner list
-
-        # find dict with max score
+        scores = result[0]
         top_label = max(scores, key=lambda x: x['score'])['label'].lower()
 
-        # Map 'very positive' to 'positive', 'very negative' to 'negative'
         if 'very positive' in top_label:
             return "positive"
         elif 'very negative' in top_label:
