@@ -3,7 +3,7 @@ import os
 import re
 from datetime import datetime, timezone
 import requests
-from shared_config import insert_mention
+from shared_config import insert_mention, get_existing_mention_ids
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -19,7 +19,8 @@ BRANDS = {
 
 TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
 
-seen_ids = set()
+seen_ids = get_existing_mention_ids()
+print(f"📋 Loaded {len(seen_ids)} mention IDs from DB.")
 new_mentions = []
 
 API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-sentiment-analysis"
