@@ -2,5 +2,3 @@ praw
 requests
 vaderSentiment
 psycopg2-binary
-transformers
-torch
