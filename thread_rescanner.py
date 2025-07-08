@@ -102,6 +102,17 @@ def rescan_threads(post_ids):
         except Exception as e:
             print(f"❌ Failed to rescan post {post_id}: {e}")
 
+def rescan_recent_threads():
+    print("🔍 Starting thread rescan...")
+    recent_post_ids = fetch_recent_threads(DAYS_BACK)
+    rescan_threads(recent_post_ids)
+    if new_mentions:
+        insert_mention(new_mentions)
+        print(f"✅ Inserted {len(new_mentions)} new mentions from rescans.")
+    else:
+        print("ℹ️ No new mentions found in rescanned threads.")
+
+
 if __name__ == "__main__":
     print("🔍 Starting thread rescan...")
     recent_post_ids = fetch_recent_threads(DAYS_BACK)
