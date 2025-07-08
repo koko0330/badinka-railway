@@ -75,16 +75,12 @@ def extract_post(post, brand):
     }
 
 
-def fetch_comments_from_pushshift(brand, days_ago=30, size=100):
-    end_time = int(time.time())
-    start_time = end_time - (days_ago * 86400)
-    url = "https://api.pushshift.io/reddit/comment/search"
+def fetch_comments_from_redditsearch(brand, size=100):
+    url = "https://api.redditsearch.io/comments/search"
     params = {
-        "q": brand,
-        "after": start_time,
-        "before": end_time,
+        "query": brand,
         "size": size,
-        "sort": "desc"
+        "sort": "desc",
     }
 
     try:
@@ -92,9 +88,8 @@ def fetch_comments_from_pushshift(brand, days_ago=30, size=100):
         response.raise_for_status()
         return response.json().get("data", [])
     except Exception as e:
-        print(f"❌ Pushshift comment fetch failed: {e}")
+        print(f"❌ RedditSearch comment fetch failed: {e}")
         return []
-
 
 def backfill():
     print("🔁 Backfilling posts...")
@@ -107,9 +102,9 @@ def backfill():
                     seen_ids.add(post.id)
                     print(f"🧵 Post: {post.permalink} | Brand: {brand}")
 
-    print("🔁 Backfilling comments from Pushshift...")
+    print("🔁 Backfilling comments from RedditSearch.io...")
     for brand, pattern in BRANDS.items():
-        results = fetch_comments_from_pushshift(brand, days_ago=DAYS_AGO, size=100)
+        results = fetch_comments_from_redditsearch(brand, size=100)
         for item in results:
             comment_id = item["id"]
             if comment_id in seen_ids:
@@ -133,6 +128,7 @@ def backfill():
                 new_mentions.append(comment_data)
                 seen_ids.add(comment_id)
                 print(f"💬 Comment: {comment_data['permalink']} | Brand: {brand}")
+
 
     if new_mentions:
         try:
