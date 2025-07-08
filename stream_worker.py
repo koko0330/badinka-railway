@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import requests
 from shared_config import insert_mention
 
-# === Reddit API from Railway ===
+# === Reddit API ===
 reddit = praw.Reddit(
     client_id="z12aa_E8kaHr_vC9LL6xCw",
     client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
@@ -21,41 +21,35 @@ BRANDS = {
 
 SEEN_IDS = set()
 COLLECTED = []
-POST_INTERVAL = 60  # seconds
-BACKFILL_INTERVAL = 300  # every 5 min
+POST_INTERVAL = 60
+BACKFILL_INTERVAL = 300
 BACKFILL_LOOKBACK_MINUTES = 15
-BACKFILL_BATCH_SIZE = 100  # how many comments to fetch per batch in backfill
-
-print("🚀 Reddit monitor started...")
+BACKFILL_BATCH_SIZE = 100
 
 API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-sentiment-analysis"
 API_TOKEN = os.getenv("HF_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
+
 def analyze_sentiment(text):
     try:
         if not text or len(text.strip()) == 0:
             return "neutral"
-        max_length = 1000
-        truncated_text = text[:max_length]
-        payload = {"inputs": truncated_text}
+        payload = {"inputs": text[:1000]}
         response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         response.raise_for_status()
-        result = response.json()
-        scores = result[0]
-        top_label = max(scores, key=lambda x: x['score'])['label'].lower()
-
+        top_label = max(response.json()[0], key=lambda x: x['score'])['label'].lower()
         if 'very positive' in top_label:
             return "positive"
         elif 'very negative' in top_label:
             return "negative"
         elif top_label in {"positive", "negative", "neutral"}:
             return top_label
-        else:
-            return "neutral"
+        return "neutral"
     except Exception as e:
         print(f"Sentiment API call failed: {e}")
         return "neutral"
+
 
 def extract_post(submission, brand):
     text = f"{submission.title} {submission.selftext}"
@@ -73,6 +67,7 @@ def extract_post(submission, brand):
         "brand": brand
     }
 
+
 def extract_comment(comment, brand):
     return {
         "type": "comment",
@@ -89,51 +84,27 @@ def extract_comment(comment, brand):
         "brand": brand
     }
 
+
 def find_brands(text):
     return [brand for brand, pattern in BRANDS.items() if pattern.search(text)]
 
-def backfill_recent_comments_bulletproof(minutes=15, batch_size=100):
-    cutoff = time.time() - (minutes * 60)
-    print(f"🔁 Deep backfilling comments from last {minutes} minutes...")
 
-    fetched = 0
+def crawl_post_and_comments(post, brand):
+    mentions = []
+
+    if brand in find_brands(f"{post.title or ''} {post.selftext or ''}"):
+        mentions.append(extract_post(post, brand))
 
     try:
-        seen_utc = set()
-        while True:
-            comments = list(reddit.subreddit("all").comments(limit=batch_size))
-            comments.sort(key=lambda c: c.created_utc)
-
-            if not comments:
-                break
-
-            all_older = True
-            for comment in comments:
-                if comment.created_utc < cutoff:
-                    continue
-
-                all_older = False
-                if comment.id in SEEN_IDS or comment.id in seen_utc:
-                    continue
-
-                for brand in find_brands(comment.body):
-                    data = extract_comment(comment, brand)
-                    COLLECTED.append(data)
-                    SEEN_IDS.add(comment.id)
-                    seen_utc.add(comment.id)
-                    fetched += 1
-                    print(f"💬 [Backfill] {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
-
-            if all_older:
-                print("⏹️ Reached end of backfill window.")
-                break
-
-            time.sleep(1)  # prevent hammering the API
-
+        post.comments.replace_more(limit=None)
+        for comment in post.comments.list():
+            if comment.id not in SEEN_IDS and brand in find_brands(comment.body):
+                mentions.append(extract_comment(comment, brand))
     except Exception as e:
-        print(f"❌ Bulletproof backfill failed: {e}")
+        print(f"⚠️ Failed to crawl comments for post {post.id}: {e}")
 
-    print(f"✅ Bulletproof backfill fetched {fetched} matching comments.")
+    return mentions
+
 
 def main():
     subreddit = reddit.subreddit("all")
@@ -141,23 +112,26 @@ def main():
     comment_stream = subreddit.stream.comments(skip_existing=True)
 
     last_push = time.time()
-    last_backfill = time.time()
 
     while True:
         now = time.time()
 
+        # Posts
         try:
             post = next(post_stream)
             if post.id not in SEEN_IDS:
-                text = f"{post.title} {post.selftext}"
-                for brand in find_brands(text):
-                    data = extract_post(post, brand)
-                    COLLECTED.append(data)
-                    SEEN_IDS.add(post.id)
-                    print(f"🧵 Post: {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
+                post_text = f"{post.title or ''} {post.selftext or ''}"
+                for brand in find_brands(post_text):
+                    mentions = crawl_post_and_comments(post, brand)
+                    for m in mentions:
+                        if m["id"] not in SEEN_IDS:
+                            COLLECTED.append(m)
+                            SEEN_IDS.add(m["id"])
+                            print(f"🧵 {m['type'].capitalize()}: {m['permalink']} | Brand: {brand} | Sentiment: {m['sentiment']}")
         except Exception:
             pass
 
+        # Comments
         try:
             comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
@@ -169,6 +143,7 @@ def main():
         except Exception:
             pass
 
+        # Push to DB
         if now - last_push > POST_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
@@ -178,12 +153,7 @@ def main():
             except Exception as e:
                 print(f"❌ Failed to store in DB: {e}")
 
-        if now - last_backfill > BACKFILL_INTERVAL:
-            backfill_recent_comments_bulletproof(
-                minutes=BACKFILL_LOOKBACK_MINUTES,
-                batch_size=BACKFILL_BATCH_SIZE
-            )
-            last_backfill = now
 
 if __name__ == "__main__":
+    print("🚀 Reddit monitor with thread-crawl started...")
     main()
