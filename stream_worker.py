@@ -15,7 +15,7 @@ reddit = praw.Reddit(
 
 # === Config ===
 BRANDS = {
-    "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
+    "badinka": re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE),
     "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
 }
 
@@ -35,7 +35,18 @@ def analyze_sentiment(text):
         response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         response.raise_for_status()
         result = response.json()
-        label = result[0].get("label", "neutral").lower()
+        print("API response:", result)  # Debug line
+
+        first_item = result[0]
+
+        # Handle case where first_item is dict or string
+        if isinstance(first_item, dict):
+            label = first_item.get("label", "neutral").lower()
+        elif isinstance(first_item, str):
+            label = first_item.lower()
+        else:
+            label = "neutral"
+
         if label in {"positive", "negative", "neutral"}:
             return label
         return "neutral"
