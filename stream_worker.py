@@ -15,7 +15,7 @@ reddit = praw.Reddit(
 
 # === Config ===
 BRANDS = {
-    "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
+    "badinka": re.compile(r'[@#]?trump(?:\.com)?', re.IGNORECASE),
     "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
 }
 
@@ -26,7 +26,7 @@ POST_INTERVAL = 60  # seconds
 print("🚀 Reddit monitor started...")
 
 API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-sentiment-analysis"
-API_TOKEN = os.getenv("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")
+API_TOKEN = os.getenv("HF_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
 def analyze_sentiment(text):
