@@ -17,7 +17,7 @@ BRANDS = {
     "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
 }
 
-TIME_FILTER = "day"  # Options: all, year, month, week, day, hour
+TIME_FILTER = "month"  # Options: all, year, month, week, day, hour
 
 seen_ids = get_existing_mention_ids()
 print(f"📋 Loaded {len(seen_ids)} mention IDs from DB.")
