@@ -1,7 +1,6 @@
 import praw
 import os
 import re
-import time
 from datetime import datetime, timezone
 import requests
 from shared_config import insert_mention, get_existing_mention_ids
@@ -19,7 +18,6 @@ BRANDS = {
 }
 
 TIME_FILTER = "month"  # Options: all, year, month, week, day, hour
-DAYS_AGO = 30  # For Pushshift comment search
 
 seen_ids = get_existing_mention_ids()
 print(f"📋 Loaded {len(seen_ids)} mention IDs from DB.")
@@ -29,11 +27,11 @@ API_URL = "https://api-inference.huggingface.co/models/tabularisai/multilingual-
 API_TOKEN = os.getenv("HF_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
-
 def analyze_sentiment(text):
     try:
         if not text or len(text.strip()) == 0:
             return "neutral"
+        # Optional: truncate very long text to avoid API issues
         max_length = 1000
         truncated_text = text[:max_length]
 
@@ -57,7 +55,6 @@ def analyze_sentiment(text):
         print(f"Sentiment API call failed: {e}")
         return "neutral"
 
-
 def extract_post(post, brand):
     text = f"{post.title or ''} {post.selftext or ''}"
     return {
@@ -74,22 +71,28 @@ def extract_post(post, brand):
         "brand": brand
     }
 
-
-def fetch_comments_from_redditsearch(brand, size=100):
-    url = "https://api.redditsearch.io/comments/search"
-    params = {
-        "query": brand,
-        "size": size,
-        "sort": "desc",
+def extract_comment(comment, brand):
+    return {
+        "type": "comment",
+        "id": comment.id,
+        "body": comment.body,
+        "permalink": f"https://reddit.com{comment.permalink}",
+        "created": datetime.fromtimestamp(comment.created_utc, tz=timezone.utc).isoformat(),
+        "subreddit": str(comment.subreddit),
+        "author": str(comment.author),
+        "score": comment.score,
+        "link_id": comment.link_id,
+        "parent_id": comment.parent_id,
+        "sentiment": analyze_sentiment(comment.body),
+        "brand": brand
     }
 
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        return response.json().get("data", [])
-    except Exception as e:
-        print(f"❌ RedditSearch comment fetch failed: {e}")
-        return []
+def find_brands(text):
+    found_brands = []
+    for brand, pattern in BRANDS.items():
+        if pattern.search(text):
+            found_brands.append(brand)
+    return found_brands
 
 def backfill():
     print("🔁 Backfilling posts...")
@@ -102,33 +105,14 @@ def backfill():
                     seen_ids.add(post.id)
                     print(f"🧵 Post: {post.permalink} | Brand: {brand}")
 
-    print("🔁 Backfilling comments from RedditSearch.io...")
+    print("🔁 Backfilling comments...")
     for brand, pattern in BRANDS.items():
-        results = fetch_comments_from_redditsearch(brand, size=100)
-        for item in results:
-            comment_id = item["id"]
-            if comment_id in seen_ids:
-                continue
-            body = item.get("body", "")
-            if pattern.search(body):
-                comment_data = {
-                    "type": "comment",
-                    "id": comment_id,
-                    "body": body,
-                    "permalink": f"https://reddit.com{item.get('permalink', '')}",
-                    "created": datetime.fromtimestamp(item["created_utc"], tz=timezone.utc).isoformat(),
-                    "subreddit": item.get("subreddit", "unknown"),
-                    "author": item.get("author", "unknown"),
-                    "score": item.get("score", 0),
-                    "link_id": item.get("link_id"),
-                    "parent_id": item.get("parent_id"),
-                    "sentiment": analyze_sentiment(body),
-                    "brand": brand
-                }
-                new_mentions.append(comment_data)
-                seen_ids.add(comment_id)
-                print(f"💬 Comment: {comment_data['permalink']} | Brand: {brand}")
-
+        for comment in reddit.subreddit("all").search(brand, sort="new", time_filter=TIME_FILTER):
+            if comment.id not in seen_ids and hasattr(comment, "body"):
+                if pattern.search(comment.body or ""):
+                    new_mentions.append(extract_comment(comment, brand))
+                    seen_ids.add(comment.id)
+                    print(f"💬 Comment: {comment.permalink} | Brand: {brand}")
 
     if new_mentions:
         try:
@@ -138,7 +122,6 @@ def backfill():
             print(f"❌ Failed to store in DB: {e}")
     else:
         print("ℹ️ No new mentions found.")
-
 
 if __name__ == "__main__":
     print("📦 Starting backfill...")
