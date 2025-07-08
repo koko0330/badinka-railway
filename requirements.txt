@@ -1,5 +1,4 @@
 praw
 requests
-vaderSentiment
 psycopg2-binary
 os
