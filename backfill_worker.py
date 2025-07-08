@@ -32,10 +32,23 @@ def analyze_sentiment(text):
         response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         response.raise_for_status()
         result = response.json()
-        label = result[0].get("label", "neutral").lower()
-        if label in {"positive", "negative", "neutral"}:
-            return label
-        return "neutral"
+        print("API response:", result)  # for debugging
+
+        # result is a list of lists of dicts: get the inner list
+        scores = result[0]  # the first (and only) inner list
+
+        # find dict with max score
+        top_label = max(scores, key=lambda x: x['score'])['label'].lower()
+
+        # Map 'very positive' to 'positive', 'very negative' to 'negative'
+        if 'very positive' in top_label:
+            return "positive"
+        elif 'very negative' in top_label:
+            return "negative"
+        elif top_label in {"positive", "negative", "neutral"}:
+            return top_label
+        else:
+            return "neutral"
     except Exception as e:
         print(f"Sentiment API call failed: {e}")
         return "neutral"
