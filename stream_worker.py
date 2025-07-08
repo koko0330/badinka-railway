@@ -24,7 +24,7 @@ COLLECTED = []
 POST_INTERVAL = 60  # seconds
 BACKFILL_INTERVAL = 300  # every 5 min
 BACKFILL_LOOKBACK_MINUTES = 15
-BACKFILL_COMMENT_LIMIT = 50
+BACKFILL_BATCH_SIZE = 100  # how many comments to fetch per batch in backfill
 
 print("🚀 Reddit monitor started...")
 
@@ -92,24 +92,48 @@ def extract_comment(comment, brand):
 def find_brands(text):
     return [brand for brand, pattern in BRANDS.items() if pattern.search(text)]
 
-def backfill_recent_comments(minutes=15, limit=50):
+def backfill_recent_comments_bulletproof(minutes=15, batch_size=100):
     cutoff = time.time() - (minutes * 60)
-    print(f"🔁 Backfilling comments from last {minutes} minutes...")
+    print(f"🔁 Deep backfilling comments from last {minutes} minutes...")
+
+    fetched = 0
 
     try:
-        for comment in reddit.subreddit("all").comments(limit=limit):
-            if comment.created_utc < cutoff:
-                continue
-            if comment.id in SEEN_IDS:
-                continue
+        seen_utc = set()
+        while True:
+            comments = list(reddit.subreddit("all").comments(limit=batch_size))
+            comments.sort(key=lambda c: c.created_utc)
 
-            for brand in find_brands(comment.body):
-                data = extract_comment(comment, brand)
-                COLLECTED.append(data)
-                SEEN_IDS.add(comment.id)
-                print(f"💬 [Backfill] {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
+            if not comments:
+                break
+
+            all_older = True
+            for comment in comments:
+                if comment.created_utc < cutoff:
+                    continue
+
+                all_older = False
+                if comment.id in SEEN_IDS or comment.id in seen_utc:
+                    continue
+
+                for brand in find_brands(comment.body):
+                    data = extract_comment(comment, brand)
+                    COLLECTED.append(data)
+                    SEEN_IDS.add(comment.id)
+                    seen_utc.add(comment.id)
+                    fetched += 1
+                    print(f"💬 [Backfill] {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
+
+            if all_older:
+                print("⏹️ Reached end of backfill window.")
+                break
+
+            time.sleep(1)  # prevent hammering the API
+
     except Exception as e:
-        print(f"❌ Backfill failed: {e}")
+        print(f"❌ Bulletproof backfill failed: {e}")
+
+    print(f"✅ Bulletproof backfill fetched {fetched} matching comments.")
 
 def main():
     subreddit = reddit.subreddit("all")
@@ -145,7 +169,6 @@ def main():
         except Exception:
             pass
 
-        # Push collected mentions to DB
         if now - last_push > POST_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
@@ -155,9 +178,11 @@ def main():
             except Exception as e:
                 print(f"❌ Failed to store in DB: {e}")
 
-        # Periodic backfill
         if now - last_backfill > BACKFILL_INTERVAL:
-            backfill_recent_comments(minutes=BACKFILL_LOOKBACK_MINUTES, limit=BACKFILL_COMMENT_LIMIT)
+            backfill_recent_comments_bulletproof(
+                minutes=BACKFILL_LOOKBACK_MINUTES,
+                batch_size=BACKFILL_BATCH_SIZE
+            )
             last_backfill = now
 
 if __name__ == "__main__":
