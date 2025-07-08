@@ -3,6 +3,7 @@ import time
 import re
 import praw
 import pytz
+import requests
 from datetime import datetime, timedelta, timezone
 from shared_config import insert_mention, get_existing_mention_ids
 
