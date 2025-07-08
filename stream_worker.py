@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import requests
 from shared_config import insert_mention
 
-# === Reddit API Credentials from Railway Variables ===
+# === Reddit API from Railway ===
 reddit = praw.Reddit(
     client_id="z12aa_E8kaHr_vC9LL6xCw",
     client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
@@ -22,6 +22,9 @@ BRANDS = {
 SEEN_IDS = set()
 COLLECTED = []
 POST_INTERVAL = 60  # seconds
+BACKFILL_INTERVAL = 300  # every 5 min
+BACKFILL_LOOKBACK_MINUTES = 15
+BACKFILL_COMMENT_LIMIT = 50
 
 print("🚀 Reddit monitor started...")
 
@@ -33,15 +36,12 @@ def analyze_sentiment(text):
     try:
         if not text or len(text.strip()) == 0:
             return "neutral"
-        # Optional: truncate very long text to avoid API issues
         max_length = 1000
         truncated_text = text[:max_length]
-
         payload = {"inputs": truncated_text}
         response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
         response.raise_for_status()
         result = response.json()
-
         scores = result[0]
         top_label = max(scores, key=lambda x: x['score'])['label'].lower()
 
@@ -90,11 +90,26 @@ def extract_comment(comment, brand):
     }
 
 def find_brands(text):
-    found_brands = []
-    for brand, pattern in BRANDS.items():
-        if pattern.search(text):
-            found_brands.append(brand)
-    return found_brands
+    return [brand for brand, pattern in BRANDS.items() if pattern.search(text)]
+
+def backfill_recent_comments(minutes=15, limit=50):
+    cutoff = time.time() - (minutes * 60)
+    print(f"🔁 Backfilling comments from last {minutes} minutes...")
+
+    try:
+        for comment in reddit.subreddit("all").comments(limit=limit):
+            if comment.created_utc < cutoff:
+                continue
+            if comment.id in SEEN_IDS:
+                continue
+
+            for brand in find_brands(comment.body):
+                data = extract_comment(comment, brand)
+                COLLECTED.append(data)
+                SEEN_IDS.add(comment.id)
+                print(f"💬 [Backfill] {data['permalink']} | Brand: {brand} | Sentiment: {data['sentiment']}")
+    except Exception as e:
+        print(f"❌ Backfill failed: {e}")
 
 def main():
     subreddit = reddit.subreddit("all")
@@ -102,6 +117,7 @@ def main():
     comment_stream = subreddit.stream.comments(skip_existing=True)
 
     last_push = time.time()
+    last_backfill = time.time()
 
     while True:
         now = time.time()
@@ -110,8 +126,7 @@ def main():
             post = next(post_stream)
             if post.id not in SEEN_IDS:
                 text = f"{post.title} {post.selftext}"
-                brands_found = find_brands(text)
-                for brand in brands_found:
+                for brand in find_brands(text):
                     data = extract_post(post, brand)
                     COLLECTED.append(data)
                     SEEN_IDS.add(post.id)
@@ -122,8 +137,7 @@ def main():
         try:
             comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
-                brands_found = find_brands(comment.body)
-                for brand in brands_found:
+                for brand in find_brands(comment.body):
                     data = extract_comment(comment, brand)
                     COLLECTED.append(data)
                     SEEN_IDS.add(comment.id)
@@ -131,6 +145,7 @@ def main():
         except Exception:
             pass
 
+        # Push collected mentions to DB
         if now - last_push > POST_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
@@ -139,6 +154,11 @@ def main():
                 last_push = now
             except Exception as e:
                 print(f"❌ Failed to store in DB: {e}")
+
+        # Periodic backfill
+        if now - last_backfill > BACKFILL_INTERVAL:
+            backfill_recent_comments(minutes=BACKFILL_LOOKBACK_MINUTES, limit=BACKFILL_COMMENT_LIMIT)
+            last_backfill = now
 
 if __name__ == "__main__":
     main()
