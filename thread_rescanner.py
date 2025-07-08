@@ -27,7 +27,7 @@ seen_ids = get_existing_mention_ids()
 new_mentions = []
 
 # Only scan posts from the past X days
-DAYS_BACK = 2
+DAYS_BACK = 365
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
