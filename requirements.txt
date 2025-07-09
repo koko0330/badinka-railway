@@ -2,3 +2,5 @@ praw
 requests
 psycopg2-binary
 pytz
+markdown
+beautifulsoup4
