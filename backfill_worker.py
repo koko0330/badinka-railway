@@ -3,6 +3,8 @@ import os
 import re
 from datetime import datetime, timezone
 import requests
+import markdown
+from bs4 import BeautifulSoup
 from shared_config import insert_mention, get_existing_mention_ids
 from thread_rescanner import rescan_recent_threads
 
@@ -88,13 +90,29 @@ def extract_comment(comment, brand):
     }
 
 
+def extract_links(text):
+    try:
+        html = markdown.markdown(text)
+        soup = BeautifulSoup(html, "html.parser")
+        return [a.get("href") for a in soup.find_all("a") if a.get("href")]
+    except Exception:
+        return []
+
 def find_brands(text):
-    found_brands = []
+    brands_found = set()
+
+    # Search plain text
     for brand, pattern in BRANDS.items():
         if pattern.search(text):
-            found_brands.append(brand)
-    return found_brands
+            brands_found.add(brand)
 
+    # Search URLs inside markdown links
+    for link in extract_links(text):
+        for brand, pattern in BRANDS.items():
+            if pattern.search(link):
+                brands_found.add(brand)
+
+    return list(brands_found)
 
 def crawl_post_and_comments(post, brand):
     mentions = []
