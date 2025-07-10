@@ -95,7 +95,6 @@ def extract_links(text):
     except Exception:
         return []
 
-
 def find_brands(text):
     brands_found = set()
 
@@ -112,23 +111,16 @@ def find_brands(text):
 
     return list(brands_found)
 
-
 def crawl_post_and_comments(post, brand):
     mentions = []
 
-    post_text = f"{post.title or ''} {post.selftext or ''}"
-    if brand not in find_brands(post_text):
-        print(f"👀 Skipped post due to no brand match: https://reddit.com{post.permalink}")
-    else:
+    if brand in find_brands(f"{post.title or ''} {post.selftext or ''}"):
         mentions.append(extract_post(post, brand))
 
     try:
         post.comments.replace_more(limit=None)
         for comment in post.comments.list():
-            if comment.id not in SEEN_IDS:
-                if brand not in find_brands(comment.body):
-                    print(f"👀 Skipped comment due to no brand match: https://reddit.com{comment.permalink}")
-                    continue
+            if comment.id not in SEEN_IDS and brand in find_brands(comment.body):
                 mentions.append(extract_comment(comment, brand))
     except Exception as e:
         print(f"⚠️ Failed to crawl comments for post {post.id}: {e}")
@@ -151,11 +143,7 @@ def main():
             post = next(post_stream)
             if post.id not in SEEN_IDS:
                 post_text = f"{post.title or ''} {post.selftext or ''}"
-                permalink = f"https://reddit.com{post.permalink}"
-                brands = find_brands(post_text)
-                if not brands:
-                    print(f"👀 Skipped due to no brand match: {permalink}")
-                for brand in brands:
+                for brand in find_brands(post_text):
                     mentions = crawl_post_and_comments(post, brand)
                     for m in mentions:
                         if m["id"] not in SEEN_IDS:
@@ -169,10 +157,7 @@ def main():
         try:
             comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
-                brands = find_brands(comment.body)
-                if not brands:
-                    print(f"👀 Skipped due to no brand match: https://reddit.com{comment.permalink}")
-                for brand in brands:
+                for brand in find_brands(comment.body):
                     data = extract_comment(comment, brand)
                     COLLECTED.append(data)
                     SEEN_IDS.add(comment.id)
