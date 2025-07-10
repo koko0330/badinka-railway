@@ -148,6 +148,8 @@ def main():
         # Handle comments from stream
         try:
             comment = next(comment_stream)
+            print(f"Link: https://reddit.com{comment.permalink}")
+            print(f"sBody: {comment.body[:300]}...\n")
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
                     m = extract_comment(comment, brand)
