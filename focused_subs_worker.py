@@ -2,21 +2,21 @@ import praw
 import time
 import re
 import os
-import threading
 import requests
-from datetime import datetime, timezone
 import markdown
 from bs4 import BeautifulSoup
+from datetime import datetime, timezone
 from shared_config import insert_mention
+import threading
 
-# === Reddit API ===
+# === Reddit API (PRAW) ===
 reddit = praw.Reddit(
     client_id="z12aa_E8kaHr_vC9LL6xCw",
     client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
     user_agent="BrandMentionBackfill/0.1 by ConfectionInfamous97"
 )
 
-# === Subreddits to monitor ===
+# === Focused subreddits ===
 SUBREDDITS = [
     "Rezz", "aves", "ElectricForest", "sewing", "avesfashion",
     "cyber_fashion", "aveoutfits", "RitaFourEssenceSystem", "SoftDramatics",
@@ -39,7 +39,7 @@ SEEN_IDS = set()
 COLLECTED = []
 FLUSH_INTERVAL = 30
 
-# === Utilities ===
+
 def extract_links(text):
     try:
         html = markdown.markdown(text)
@@ -47,6 +47,7 @@ def extract_links(text):
         return [a.get("href") for a in soup.find_all("a") if a.get("href")]
     except Exception:
         return []
+
 
 def find_brands(text):
     brands_found = set()
@@ -58,6 +59,7 @@ def find_brands(text):
             if pattern.search(link):
                 brands_found.add(brand)
     return list(brands_found)
+
 
 def extract_post(submission, brand):
     return {
@@ -73,6 +75,7 @@ def extract_post(submission, brand):
         "sentiment": None,
         "brand": brand
     }
+
 
 def extract_comment(comment, brand):
     return {
@@ -90,49 +93,7 @@ def extract_comment(comment, brand):
         "brand": brand
     }
 
-# === JSON Comment Poller ===
-def poll_json_comments():
-    print("📡 JSON comment poller started...")
-    LAST_SEEN = set()
-    headers = {"User-Agent": "KeywordWatcher/1.0"}
-    url = f"https://www.reddit.com/r/{'+'.join(SUBREDDITS)}/comments.json?limit=100"
 
-    while True:
-        try:
-            res = requests.get(url, headers=headers, timeout=10)
-            res.raise_for_status()
-            data = res.json()
-
-            for item in data["data"]["children"]:
-                comment = item["data"]
-                cid = comment["id"]
-                body = comment.get("body", "")
-                if cid in SEEN_IDS or cid in LAST_SEEN:
-                    continue
-
-                LAST_SEEN.add(cid)
-                for brand in find_brands(body):
-                    m = {
-                        "type": "comment",
-                        "id": cid,
-                        "body": body,
-                        "permalink": f"https://reddit.com{comment['permalink']}",
-                        "created": datetime.fromtimestamp(comment["created_utc"], tz=timezone.utc).isoformat(),
-                        "subreddit": comment["subreddit"],
-                        "author": comment.get("author"),
-                        "score": comment.get("score", 0),
-                        "link_id": comment.get("link_id", ""),
-                        "parent_id": comment.get("parent_id", ""),
-                        "sentiment": None,
-                        "brand": brand
-                    }
-                    COLLECTED.append(m)
-                    print(f"🌐 JSON Poller: {m['permalink']} | Brand: {brand}")
-        except Exception as e:
-            print(f"❌ JSON polling error: {e}")
-        time.sleep(2)
-
-# === Main Loop ===
 def main():
     post_stream = subreddit.stream.submissions(skip_existing=True)
     comment_stream = subreddit.stream.comments(skip_existing=True)
@@ -180,12 +141,56 @@ def main():
             except Exception as e:
                 print(f"❌ Failed to insert to DB: {e}")
 
-# === Entry Point ===
+
+# === JSON Comment Poller ===
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; RedditScraper/1.0)"}
+CHUNK_SIZE = 5
+SLEEP_BETWEEN_REQUESTS = 10
+JSON_LIMIT = 100
+JSON_POLL_INTERVAL = 60
+
+def json_poll_comments():
+    print("📡 JSON comment poller started...")
+    seen_json_ids = set()
+
+    while True:
+        for i in range(0, len(SUBREDDITS), CHUNK_SIZE):
+            chunk = SUBREDDITS[i:i + CHUNK_SIZE]
+            chunk_str = "+".join(chunk)
+            url = f"https://www.reddit.com/r/{chunk_str}/comments.json?limit={JSON_LIMIT}"
+
+            try:
+                response = requests.get(url, headers=HEADERS, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+
+                for item in data.get("data", {}).get("children", []):
+                    comment = item["data"]
+                    comment_id = comment["id"]
+                    body = comment.get("body", "")
+
+                    if comment_id in seen_json_ids:
+                        continue
+
+                    seen_json_ids.add(comment_id)
+                    print(f"🔗 Link: https://reddit.com{comment.get('permalink')}")
+                    print(f"📝 Body: {body[:1000]}...\n")
+
+            except Exception as e:
+                print(f"❌ JSON polling error: {e}")
+
+            time.sleep(SLEEP_BETWEEN_REQUESTS)
+
+        time.sleep(JSON_POLL_INTERVAL)
+
+
+# === Start everything ===
 if __name__ == "__main__":
     print("🎯 Focused subreddit worker started...")
 
-    # Start JSON polling in background thread
-    threading.Thread(target=poll_json_comments, daemon=True).start()
+    # Start JSON poller in a background thread
+    json_thread = threading.Thread(target=json_poll_comments, daemon=True)
+    json_thread.start()
 
-    # Start main PRAW stream
+    # Start main stream processing
     main()
