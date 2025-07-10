@@ -116,6 +116,7 @@ def main():
         # Handle comments
         try:
             comment = next(comment_stream)
+            print(comment)
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
                     m = extract_comment(comment, brand)
