@@ -116,7 +116,10 @@ def main():
         # Handle comments
         try:
             comment = next(comment_stream)
-            print(comment_stream)
+            
+            print(f"🔗 Link: https://reddit.com{comment.permalink}")
+            print(f"📝 Body: {comment.body[:1000]}...\n")  # limit to 1000 chars for readability
+
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
                     m = extract_comment(comment, brand)
