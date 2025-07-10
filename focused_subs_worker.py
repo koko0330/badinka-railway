@@ -18,7 +18,7 @@ reddit = praw.Reddit(
 SUBREDDITS = [
     "Rezz", "aves", "ElectricForest", "sewing", "avesfashion",
     "cyber_fashion", "aveoutfits", "RitaFourEssenceSystem", "SoftDramatics",
-    "avesNYC", "TorontoRaves", "poledancing", "veld", "BADINKA",
+    "avesNYC", "TorontoRaves", "poledancing", "veld", "BADINKA", "PlusSize",
     "LostLandsMusicFest", "festivals", "avefashion", "avesafe", "EDCOrlando",
     "findfashion", "BassCanyon", "Aerials", "electricdaisycarnival", "bonnaroo",
     "Tomorrowland", "femalefashion", "Soundhaven", "warpedtour", "Shambhala",
