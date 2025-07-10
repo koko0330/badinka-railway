@@ -79,7 +79,7 @@ def extract_comment(comment, brand):
 
 
 def json_poll_comments():
-    print("\ud83d\udce1 JSON comment poller started...")
+    print("JSON comment poller started...")
     headers = {"User-Agent": "BrandMentionBackfill/0.1 by ConfectionInfamous97"}
     seen_json_ids = set()
     chunk_size = 5
@@ -94,7 +94,7 @@ def json_poll_comments():
             try:
                 response = requests.get(url, headers=headers, timeout=10)
                 if response.status_code == 429:
-                    print(f"\u26a0\ufe0f 429 Too Many Requests on chunk: {chunk_str}")
+                    print(f"429 Too Many Requests on chunk: {chunk_str}")
                     time.sleep(30)
                     continue
 
@@ -128,7 +128,7 @@ def json_poll_comments():
                         SEEN_IDS.add(cid)
 
             except Exception as e:
-                print(f"\u274c JSON polling error for chunk {chunk_str}: {e}")
+                print(f"JSON polling error for chunk {chunk_str}: {e}")
 
             time.sleep(delay_between_chunks)
 
@@ -140,7 +140,7 @@ def main():
     # Start JSON poller thread
     threading.Thread(target=json_poll_comments, daemon=True).start()
 
-    print("\ud83c\udfaf Focused subreddit worker started...")
+    print("Focused subreddit worker started...")
 
     while True:
         now = time.time()
@@ -153,7 +153,7 @@ def main():
                     m = extract_comment(comment, brand)
                     COLLECTED.append(m)
                     SEEN_IDS.add(comment.id)
-                    print(f"\ud83d\udcac Comment: {m['permalink']} | Brand: {brand}")
+                    print(f"Comment: {m['permalink']} | Brand: {brand}")
         except Exception:
             pass
 
@@ -161,11 +161,11 @@ def main():
         if now - last_flush > FLUSH_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
-                print(f"\u2705 Stored {len(COLLECTED)} mentions in DB.")
+                print(f"Stored {len(COLLECTED)} mentions in DB.")
                 COLLECTED.clear()
                 last_flush = now
             except Exception as e:
-                print(f"\u274c Failed to insert to DB: {e}")
+                print(f"Failed to insert to DB: {e}")
 
 
 if __name__ == "__main__":
