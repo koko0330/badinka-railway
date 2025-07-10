@@ -1,4 +1,3 @@
-# stream_posts.py
 import praw
 import time
 import re
