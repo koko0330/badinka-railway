@@ -7,14 +7,12 @@ import markdown
 from bs4 import BeautifulSoup
 from shared_config import insert_mention
 
-# === Reddit API ===
 reddit = praw.Reddit(
     client_id="your_client_id",
     client_secret="your_client_secret",
     user_agent="BrandMentionBot/fast"
 )
 
-# === Config ===
 BRANDS = {
     "badinka": re.compile(r'[@#]?badinka(?:\.com)?', re.IGNORECASE),
     "iheartraves": re.compile(r'[@#]?iheartraves(?:\.com)?', re.IGNORECASE),
@@ -22,8 +20,7 @@ BRANDS = {
 
 SEEN_IDS = set()
 COLLECTED = []
-POST_INTERVAL = 30  # Faster flush to DB
-
+POST_INTERVAL = 30
 
 def extract_links(text):
     try:
@@ -32,7 +29,6 @@ def extract_links(text):
         return [a.get("href") for a in soup.find_all("a") if a.get("href")]
     except Exception:
         return []
-
 
 def find_brands(text):
     brands_found = set()
@@ -44,23 +40,6 @@ def find_brands(text):
             if pattern.search(link):
                 brands_found.add(brand)
     return list(brands_found)
-
-
-def extract_post(submission, brand):
-    return {
-        "type": "post",
-        "id": submission.id,
-        "title": submission.title,
-        "body": submission.selftext,
-        "permalink": f"https://reddit.com{submission.permalink}",
-        "created": datetime.fromtimestamp(submission.created_utc, tz=timezone.utc).isoformat(),
-        "subreddit": str(submission.subreddit),
-        "author": str(submission.author),
-        "score": submission.score,
-        "sentiment": None,  # Mark for later processing
-        "brand": brand
-    }
-
 
 def extract_comment(comment, brand):
     return {
@@ -74,35 +53,17 @@ def extract_comment(comment, brand):
         "score": comment.score,
         "link_id": comment.link_id,
         "parent_id": comment.parent_id,
-        "sentiment": None,  # Mark for later processing
+        "sentiment": None,
         "brand": brand
     }
 
-
 def main():
     subreddit = reddit.subreddit("all")
-    post_stream = subreddit.stream.submissions(skip_existing=True)
     comment_stream = subreddit.stream.comments(skip_existing=True)
-
     last_push = time.time()
 
     while True:
         now = time.time()
-
-        # Posts
-        try:
-            post = next(post_stream)
-            if post.id not in SEEN_IDS:
-                post_text = f"{post.title or ''} {post.selftext or ''}"
-                for brand in find_brands(post_text):
-                    m = extract_post(post, brand)
-                    COLLECTED.append(m)
-                    SEEN_IDS.add(post.id)
-                    print(f"🧵 Post: {m['permalink']} | Brand: {brand}")
-        except Exception:
-            pass
-
-        # Comments
         try:
             comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
@@ -114,17 +75,15 @@ def main():
         except Exception:
             pass
 
-        # Flush to DB
         if now - last_push > POST_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
-                print(f"✅ Stored {len(COLLECTED)} mentions in DB.")
+                print(f"✅ Stored {len(COLLECTED)} comments in DB.")
                 COLLECTED.clear()
                 last_push = now
             except Exception as e:
-                print(f"❌ Failed to store in DB: {e}")
-
+                print(f"❌ Failed to store comments: {e}")
 
 if __name__ == "__main__":
-    print("⚡ Fast Reddit stream monitor started...")
+    print("🚀 Comment stream worker started...")
     main()
