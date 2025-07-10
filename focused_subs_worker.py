@@ -96,45 +96,57 @@ def extract_comment(comment, brand):
 
 def json_poll_comments():
     print("📡 JSON comment poller started...")
-    base_url = f"https://www.reddit.com/r/{'+'.join(SUBREDDITS)}/comments.json?limit=100"
     headers = {"User-Agent": "BrandMentionBackfill/0.1 by ConfectionInfamous97"}
+    seen_json_ids = set()
+    chunk_size = 5
+    delay_between_chunks = 10  # seconds
 
     while True:
-        try:
-            response = requests.get(base_url, headers=headers, timeout=10)
-            if response.status_code == 429:
-                print("⚠️ JSON polling error: 429 Too Many Requests — backing off.")
-                time.sleep(30)
-                continue
+        for i in range(0, len(SUBREDDITS), chunk_size):
+            chunk = SUBREDDITS[i:i + chunk_size]
+            chunk_str = "+".join(chunk)
+            url = f"https://www.reddit.com/r/{chunk_str}/comments.json?limit=100"
 
-            response.raise_for_status()
-            data = response.json()
-            children = data.get("data", {}).get("children", [])
-            for item in children:
-                c = item.get("data", {})
-                if not c or c["id"] in SEEN_IDS:
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+                if response.status_code == 429:
+                    print(f"⚠️ 429 Too Many Requests — backing off on chunk: {chunk_str}")
+                    time.sleep(30)
                     continue
-                body = c.get("body", "")
-                for brand in find_brands(body):
-                    m = {
-                        "type": "comment",
-                        "id": c["id"],
-                        "body": c["body"],
-                        "permalink": f"https://reddit.com{c['permalink']}",
-                        "created": datetime.fromtimestamp(c["created_utc"], tz=timezone.utc).isoformat(),
-                        "subreddit": c["subreddit"],
-                        "author": c["author"],
-                        "score": c["score"],
-                        "link_id": c["link_id"],
-                        "parent_id": c["parent_id"],
-                        "sentiment": None,
-                        "brand": brand
-                    }
-                    COLLECTED.append(m)
-                    SEEN_IDS.add(c["id"])
-        except Exception as e:
-            print(f"❌ JSON polling error: {e}")
-        time.sleep(15)
+
+                response.raise_for_status()
+                data = response.json()
+                children = data.get("data", {}).get("children", [])
+
+                for item in children:
+                    c = item.get("data", {})
+                    cid = c.get("id")
+                    if not c or cid in SEEN_IDS or cid in seen_json_ids:
+                        continue
+                    body = c.get("body", "")
+                    for brand in find_brands(body):
+                        m = {
+                            "type": "comment",
+                            "id": cid,
+                            "body": c["body"],
+                            "permalink": f"https://reddit.com{c['permalink']}",
+                            "created": datetime.fromtimestamp(c["created_utc"], tz=timezone.utc).isoformat(),
+                            "subreddit": c["subreddit"],
+                            "author": c["author"],
+                            "score": c["score"],
+                            "link_id": c["link_id"],
+                            "parent_id": c["parent_id"],
+                            "sentiment": None,
+                            "brand": brand
+                        }
+                        COLLECTED.append(m)
+                        seen_json_ids.add(cid)
+                        SEEN_IDS.add(cid)
+
+            except Exception as e:
+                print(f"❌ JSON polling error for chunk {chunk_str}: {e}")
+
+            time.sleep(delay_between_chunks)  # avoid hammering Reddit
 
 
 def main():
