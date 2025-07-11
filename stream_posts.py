@@ -62,7 +62,6 @@ def main():
     last_push = time.time()
 
     for post in post_stream:
-        print(post.title)
         try:
             if post.id not in SEEN_IDS:
                 text = f"{post.title or ''} {post.selftext or ''}"
