@@ -9,9 +9,9 @@ import prawcore
 
 # === Reddit API ===
 reddit = praw.Reddit(
-    client_id="z12aa_E8kaHr_vC9LL6xCw",
-    client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
-    user_agent="BrandMentionBackfill/0.1 by ConfectionInfamous97"
+    client_id="3VI1QspELmEQ96bKo6C3BQ",
+    client_secret="yeoMoHX2b9pNAemTLxtpgBBuFY7uaQ",
+    user_agent="BrandMention/0.1 by Disastrous-Sun2226"
 )
 
 # === Brand patterns ===
