@@ -19,7 +19,7 @@ reddit = praw.Reddit(
 # === Subreddits to monitor ===
 SUBREDDITS = [
     "Rezz", "aves", "ElectricForest", "sewing", "avesfashion",
-    "cyber_fashion", "aveoutfits", "RitaFourEssenceSystem", "SoftDramatics",
+    "cyber_fashion", "aveoutfits", "RitaFourEssenceSystem", "SoftDramatics", "Shein",
     "avesNYC", "TorontoRaves", "poledancing", "veld", "BADINKA", "PlusSize",
     "LostLandsMusicFest", "festivals", "avefashion", "avesafe", "EDCOrlando",
     "findfashion", "BassCanyon", "Aerials", "electricdaisycarnival", "bonnaroo",
