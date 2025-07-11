@@ -8,9 +8,9 @@ from bs4 import BeautifulSoup
 from shared_config import insert_mention
 
 reddit = praw.Reddit(
-    client_id="your_client_id",
-    client_secret="your_client_secret",
-    user_agent="BrandMentionBot/fast"
+    client_id="z12aa_E8kaHr_vC9LL6xCw",
+    client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
+    user_agent="BrandMentionBackfill/0.1 by ConfectionInfamous97"
 )
 
 BRANDS = {
@@ -61,11 +61,9 @@ def main():
     post_stream = subreddit.stream.submissions(skip_existing=True)
     last_push = time.time()
 
-    while True:
-        now = time.time()
+    for post in post_stream:
+        print(post.title)
         try:
-            post = next(post_stream)
-            print(post.title)
             if post.id not in SEEN_IDS:
                 text = f"{post.title or ''} {post.selftext or ''}"
                 for brand in find_brands(text):
@@ -74,8 +72,9 @@ def main():
                     SEEN_IDS.add(post.id)
                     print(f"🧵 Post: {m['permalink']} | Brand: {brand}")
         except Exception:
-            pass
+            continue
 
+        now = time.time()
         if now - last_push > POST_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
