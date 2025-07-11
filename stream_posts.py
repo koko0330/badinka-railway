@@ -10,7 +10,7 @@ import prawcore  # ✅ Needed to catch 429 TooManyRequests
 # === Reddit API ===
 reddit = praw.Reddit(
     client_id="ILsQFrHHbPkIyTR_CKu2Dw",
-    client_secret="	KfrgQRv9Eb23jBYbFpT1cWzD97jWOQ",
+    client_secret="KfrgQRv9Eb23jBYbFpT1cWzD97jWOQ",
     user_agent="InterestsScanner/0.1 by Relevant-Maybe3472"
 )
 
