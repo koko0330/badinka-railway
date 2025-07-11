@@ -9,9 +9,9 @@ import prawcore  # ✅ Needed to catch 429 TooManyRequests
 
 # === Reddit API ===
 reddit = praw.Reddit(
-    client_id="z12aa_E8kaHr_vC9LL6xCw",
-    client_secret="AfCarYADJDQ2MU3rdIUW1KjMDRvSrw",
-    user_agent="BrandMentionBackfill/0.1 by ConfectionInfamous97"
+    client_id="ILsQFrHHbPkIyTR_CKu2Dw",
+    client_secret="	KfrgQRv9Eb23jBYbFpT1cWzD97jWOQ",
+    user_agent="InterestsScanner/0.1 by Relevant-Maybe3472"
 )
 
 # === Brand patterns ===
