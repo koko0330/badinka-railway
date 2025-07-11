@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import markdown
 from bs4 import BeautifulSoup
 from shared_config import insert_mention
-import prawcore  # ✅ Required for handling TooManyRequests
+import prawcore
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -24,7 +24,6 @@ SEEN_IDS = set()
 COLLECTED = []
 POST_INTERVAL = 30  # seconds
 
-
 def extract_links(text):
     try:
         html = markdown.markdown(text)
@@ -32,7 +31,6 @@ def extract_links(text):
         return [a.get("href") for a in soup.find_all("a") if a.get("href")]
     except Exception:
         return []
-
 
 def find_brands(text):
     brands_found = set()
@@ -44,7 +42,6 @@ def find_brands(text):
             if pattern.search(link):
                 brands_found.add(brand)
     return list(brands_found)
-
 
 def extract_comment(comment, brand):
     return {
@@ -62,19 +59,9 @@ def extract_comment(comment, brand):
         "brand": brand
     }
 
-
-def main():
-    print("🚀 Comment stream worker started...")
+def stream_worker():
     subreddit = reddit.subreddit("all")
-
-    # ✅ Retry stream setup if 429 error is raised
-    while True:
-        try:
-            comment_stream = subreddit.stream.comments()
-            break  # success
-        except prawcore.exceptions.TooManyRequests:
-            print("⏳ Rate limited when starting comment stream. Waiting 60 seconds...")
-            time.sleep(60)
+    comment_stream = subreddit.stream.comments()
 
     last_push = time.time()
 
@@ -99,6 +86,18 @@ def main():
             except Exception as e:
                 print(f"❌ Failed to store comments: {e}")
 
+def main():
+    print("🚀 Comment stream worker started...")
+
+    while True:
+        try:
+            stream_worker()
+        except prawcore.exceptions.TooManyRequests:
+            print("⏳ Rate limited during streaming. Waiting 60 seconds...")
+            time.sleep(60)
+        except Exception as e:
+            print(f"⚠️ Unexpected error in stream loop: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
