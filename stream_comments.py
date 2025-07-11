@@ -1,7 +1,6 @@
 import praw
 import time
 import re
-import os
 from datetime import datetime, timezone
 import markdown
 from bs4 import BeautifulSoup
@@ -58,8 +57,9 @@ def extract_comment(comment, brand):
     }
 
 def main():
+    print("🚀 Comment stream worker started...")
     subreddit = reddit.subreddit("all")
-    comment_stream = subreddit.stream.comments(skip_existing=True)
+    comment_stream = subreddit.stream.comments()  # ✅ no skip_existing to avoid 429
     last_push = time.time()
 
     for comment in comment_stream:
@@ -84,5 +84,4 @@ def main():
                 print(f"❌ Failed to store comments: {e}")
 
 if __name__ == "__main__":
-    print("🚀 Comment stream worker started...")
     main()
