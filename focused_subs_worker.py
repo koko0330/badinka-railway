@@ -41,7 +41,6 @@ FLUSH_INTERVAL = 30
 
 
 def extract_links(text):
-    """Extract both anchor text and href from markdown links."""
     try:
         html = markdown.markdown(text)
         soup = BeautifulSoup(html, "html.parser")
@@ -49,23 +48,17 @@ def extract_links(text):
     except Exception:
         return []
 
-def find_brands(text):
-    """Search text, URLs, and anchor text for brand mentions."""
-    brands_found = set()
 
-    # Check plain text
+def find_brands(text):
+    brands_found = set()
     for brand, pattern in BRANDS.items():
         if pattern.search(text):
             brands_found.add(brand)
-
-    # Check anchor text and URLs
     for anchor_text, href in extract_links(text):
         for brand, pattern in BRANDS.items():
             if pattern.search(anchor_text) or pattern.search(href):
                 brands_found.add(brand)
-
     return list(brands_found)
-
 
 
 def extract_comment(comment, brand):
@@ -86,11 +79,12 @@ def extract_comment(comment, brand):
 
 
 def json_poll_comments():
-    print("JSON comment poller started...")
-    headers = {"User-Agent": "BrandMentionBackfill/0.1 by ConfectionInfamous97"}
+    print("📡 JSON comment poller started...")
+    session = requests.Session()
+    session.headers.update({"User-Agent": "BrandMentionBackfill/0.1 by ConfectionInfamous97"})
     seen_json_ids = set()
-    chunk_size = 5
-    delay_between_chunks = 10  # seconds
+    chunk_size = 6  # slightly larger to reduce request count
+    delay_between_chunks = 15  # increased to reduce 429s
 
     while True:
         for i in range(0, len(SUBREDDITS), chunk_size):
@@ -99,9 +93,9 @@ def json_poll_comments():
             url = f"https://www.reddit.com/r/{chunk_str}/comments.json?limit=100"
 
             try:
-                response = requests.get(url, headers=headers, timeout=10)
+                response = session.get(url, timeout=10)
                 if response.status_code == 429:
-                    print(f"429 Too Many Requests on chunk: {chunk_str}")
+                    print(f"❌ 429 Too Many Requests on chunk: {chunk_str}")
                     time.sleep(30)
                     continue
 
@@ -115,11 +109,14 @@ def json_poll_comments():
                     if not c or cid in SEEN_IDS or cid in seen_json_ids:
                         continue
                     body = c.get("body", "")
+                    if len(body) < 20:
+                        continue
+
                     for brand in find_brands(body):
                         m = {
                             "type": "comment",
                             "id": cid,
-                            "body": c["body"],
+                            "body": body,
                             "permalink": f"https://reddit.com{c['permalink']}",
                             "created": datetime.fromtimestamp(c["created_utc"], tz=timezone.utc).isoformat(),
                             "subreddit": c["subreddit"],
@@ -135,7 +132,7 @@ def json_poll_comments():
                         SEEN_IDS.add(cid)
 
             except Exception as e:
-                print(f"JSON polling error for chunk {chunk_str}: {e}")
+                print(f"❌ JSON polling error for chunk {chunk_str}: {e}")
 
             time.sleep(delay_between_chunks)
 
@@ -144,15 +141,13 @@ def main():
     comment_stream = subreddit.stream.comments(skip_existing=True)
     last_flush = time.time()
 
-    # Start JSON poller thread
     threading.Thread(target=json_poll_comments, daemon=True).start()
 
-    print("Focused subreddit worker started...")
+    print("🎯 Focused subreddit worker started...")
 
     while True:
         now = time.time()
 
-        # Handle comments from stream
         try:
             comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
@@ -160,19 +155,18 @@ def main():
                     m = extract_comment(comment, brand)
                     COLLECTED.append(m)
                     SEEN_IDS.add(comment.id)
-                    print(f"Comment: {m['permalink']} | Brand: {brand}")
+                    print(f"💬 Comment: {m['permalink']} | Brand: {brand}")
         except Exception:
             pass
 
-        # Flush to DB
         if now - last_flush > FLUSH_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
-                print(f"Stored {len(COLLECTED)} mentions in DB.")
+                print(f"✅ Stored {len(COLLECTED)} mentions in DB.")
                 COLLECTED.clear()
                 last_flush = now
             except Exception as e:
-                print(f"Failed to insert to DB: {e}")
+                print(f"❌ Failed to insert to DB: {e}")
 
 
 if __name__ == "__main__":
