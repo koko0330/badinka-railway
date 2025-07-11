@@ -63,6 +63,7 @@ def main():
     last_push = time.time()
 
     for comment in comment_stream:
+        print(comment.permalink)
         try:
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
