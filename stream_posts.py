@@ -65,6 +65,7 @@ def main():
         now = time.time()
         try:
             post = next(post_stream)
+            print(post.title)
             if post.id not in SEEN_IDS:
                 text = f"{post.title or ''} {post.selftext or ''}"
                 for brand in find_brands(text):
