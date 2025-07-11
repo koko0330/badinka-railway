@@ -1,7 +1,6 @@
 import praw
 import time
 import re
-import os
 from datetime import datetime, timezone
 import markdown
 from bs4 import BeautifulSoup
@@ -20,7 +19,7 @@ BRANDS = {
 
 SEEN_IDS = set()
 COLLECTED = []
-POST_INTERVAL = 30
+POST_INTERVAL = 30  # seconds
 
 def extract_links(text):
     try:
@@ -57,8 +56,9 @@ def extract_post(submission, brand):
     }
 
 def main():
+    print("🚀 Post stream worker started...")
     subreddit = reddit.subreddit("all")
-    post_stream = subreddit.stream.submissions(skip_existing=True)
+    post_stream = subreddit.stream.submissions()  # no skip_existing to avoid rate limits
     last_push = time.time()
 
     for post in post_stream:
@@ -84,5 +84,5 @@ def main():
                 print(f"❌ Failed to store posts: {e}")
 
 if __name__ == "__main__":
-    print("🚀 Post stream worker started...")
     main()
+
