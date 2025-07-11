@@ -62,10 +62,8 @@ def main():
     comment_stream = subreddit.stream.comments(skip_existing=True)
     last_push = time.time()
 
-    while True:
-        now = time.time()
+    for comment in comment_stream:
         try:
-            comment = next(comment_stream)
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
                     m = extract_comment(comment, brand)
@@ -73,8 +71,9 @@ def main():
                     SEEN_IDS.add(comment.id)
                     print(f"💬 Comment: {m['permalink']} | Brand: {brand}")
         except Exception:
-            pass
+            continue
 
+        now = time.time()
         if now - last_push > POST_INTERVAL and COLLECTED:
             try:
                 insert_mention(COLLECTED)
