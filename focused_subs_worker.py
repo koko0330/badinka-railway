@@ -41,24 +41,31 @@ FLUSH_INTERVAL = 30
 
 
 def extract_links(text):
+    """Extract both anchor text and href from markdown links."""
     try:
         html = markdown.markdown(text)
         soup = BeautifulSoup(html, "html.parser")
-        return [a.get("href") for a in soup.find_all("a") if a.get("href")]
+        return [(a.get_text(), a.get("href")) for a in soup.find_all("a") if a.get("href")]
     except Exception:
         return []
 
-
 def find_brands(text):
+    """Search text, URLs, and anchor text for brand mentions."""
     brands_found = set()
+
+    # Check plain text
     for brand, pattern in BRANDS.items():
         if pattern.search(text):
             brands_found.add(brand)
-    for link in extract_links(text):
+
+    # Check anchor text and URLs
+    for anchor_text, href in extract_links(text):
         for brand, pattern in BRANDS.items():
-            if pattern.search(link):
+            if pattern.search(anchor_text) or pattern.search(href):
                 brands_found.add(brand)
+
     return list(brands_found)
+
 
 
 def extract_comment(comment, brand):
@@ -148,8 +155,6 @@ def main():
         # Handle comments from stream
         try:
             comment = next(comment_stream)
-            print(f"Link: https://reddit.com{comment.permalink}")
-            print(f"sBody: {comment.body[:300]}...\n")
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
                     m = extract_comment(comment, brand)
