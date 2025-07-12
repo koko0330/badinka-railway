@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import markdown
 from bs4 import BeautifulSoup
 from shared_config import insert_mention
-import prawcore  # ✅ Needed to catch 429 TooManyRequests
+import prawcore
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -66,40 +66,46 @@ def main():
     print("🚀 Post stream worker started...")
     subreddit = reddit.subreddit("all")
 
-    # ✅ Retry loop for rate-limited stream setup
-    while True:
-        try:
-            post_stream = subreddit.stream.submissions()
-            break  # success
-        except prawcore.exceptions.TooManyRequests:
-            print("⏳ Rate limited when starting post stream. Waiting 60 seconds...")
-            time.sleep(60)
+    try:
+        post_stream = subreddit.stream.submissions(pause_after=5)
+    except prawcore.exceptions.TooManyRequests:
+        print("⏳ Rate limited when starting post stream. Waiting 60 seconds...")
+        time.sleep(60)
+        return
 
     last_push = time.time()
 
-    for post in post_stream:
+    while True:
         try:
-            if post.id not in SEEN_IDS:
-                text = f"{post.title or ''} {post.selftext or ''}"
-                for brand in find_brands(text):
-                    m = extract_post(post, brand)
-                    COLLECTED.append(m)
-                    SEEN_IDS.add(post.id)
-                    print(f"🧵 Post: {m['permalink']} | Brand: {brand}")
-        except Exception:
-            continue
+            for post in post_stream:
+                if post is None:
+                    time.sleep(5)  # Pause to avoid 429
+                    continue
 
-        now = time.time()
-        if now - last_push > POST_INTERVAL and COLLECTED:
-            try:
-                insert_mention(COLLECTED)
-                print(f"✅ Stored {len(COLLECTED)} posts in DB.")
-                COLLECTED.clear()
-                last_push = now
-            except Exception as e:
-                print(f"❌ Failed to store posts: {e}")
+                if post.id not in SEEN_IDS:
+                    text = f"{post.title or ''} {post.selftext or ''}"
+                    for brand in find_brands(text):
+                        m = extract_post(post, brand)
+                        COLLECTED.append(m)
+                        SEEN_IDS.add(post.id)
+                        print(f"🧵 Post: {m['permalink']} | Brand: {brand}")
+
+                now = time.time()
+                if now - last_push > POST_INTERVAL and COLLECTED:
+                    try:
+                        insert_mention(COLLECTED)
+                        print(f"✅ Stored {len(COLLECTED)} posts in DB.")
+                        COLLECTED.clear()
+                        last_push = now
+                    except Exception as e:
+                        print(f"❌ Failed to store posts: {e}")
+        except prawcore.exceptions.TooManyRequests:
+            print("⏳ Rate limited during stream. Waiting 60 seconds...")
+            time.sleep(60)
+        except Exception as e:
+            print(f"⚠️ Unexpected error: {e}")
+            time.sleep(10)
 
 
 if __name__ == "__main__":
     main()
-
