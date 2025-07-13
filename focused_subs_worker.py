@@ -1,13 +1,17 @@
 import praw
 import time
 import re
-import os
 import requests
+import random
 from datetime import datetime, timezone
 import markdown
 from bs4 import BeautifulSoup
 from shared_config import insert_mention
 import threading
+from bs4 import XMLParsedAsHTMLWarning
+import warnings
+
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 # === Reddit API ===
 reddit = praw.Reddit(
@@ -83,8 +87,8 @@ def json_poll_comments():
     session = requests.Session()
     session.headers.update({"User-Agent": "BrandMentionBackfill/0.1 by ConfectionInfamous97"})
     seen_json_ids = set()
-    chunk_size = 6  # slightly larger to reduce request count
-    delay_between_chunks = 15  # increased to reduce 429s
+    chunk_size = 5  # Reduced chunk size for stability
+    base_delay = 15
 
     while True:
         for i in range(0, len(SUBREDDITS), chunk_size):
@@ -98,8 +102,8 @@ def json_poll_comments():
                     print(f"❌ 429 Too Many Requests on chunk: {chunk_str}")
                     time.sleep(30)
                     continue
-
                 response.raise_for_status()
+
                 data = response.json()
                 children = data.get("data", {}).get("children", [])
 
@@ -131,10 +135,23 @@ def json_poll_comments():
                         seen_json_ids.add(cid)
                         SEEN_IDS.add(cid)
 
+            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
+                print(f"❌ Connection error for chunk {chunk_str}: {e}")
+                backoff = random.randint(20, 40)
+                print(f"⏳ Backing off for {backoff} seconds...")
+                time.sleep(backoff)
+            except requests.exceptions.HTTPError as e:
+                if response.status_code >= 500:
+                    print(f"❌ 5xx server error for chunk {chunk_str}: {e}")
+                    backoff = random.randint(25, 60)
+                    print(f"⏳ Backing off for {backoff} seconds...")
+                    time.sleep(backoff)
+                else:
+                    print(f"❌ HTTP error on chunk {chunk_str}: {e}")
             except Exception as e:
-                print(f"❌ JSON polling error for chunk {chunk_str}: {e}")
+                print(f"❌ Unknown error on chunk {chunk_str}: {e}")
 
-            time.sleep(delay_between_chunks)
+            time.sleep(base_delay)
 
 
 def main():
