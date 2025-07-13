@@ -7,6 +7,11 @@ from bs4 import BeautifulSoup
 from shared_config import insert_mention
 import prawcore
 
+# ✅ Suppress XMLParsedAsHTMLWarning
+from bs4 import XMLParsedAsHTMLWarning
+import warnings
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
 # === Reddit API ===
 reddit = praw.Reddit(
     client_id="3VI1QspELmEQ96bKo6C3BQ",
