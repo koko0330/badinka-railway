@@ -64,22 +64,16 @@ def extract_post(submission, brand):
 
 def main():
     print("🚀 Post stream worker started...")
-    subreddit = reddit.subreddit("all")
-
-    try:
-        post_stream = subreddit.stream.submissions(pause_after=5)
-    except prawcore.exceptions.TooManyRequests:
-        print("⏳ Rate limited when starting post stream. Waiting 60 seconds...")
-        time.sleep(60)
-        return
-
     last_push = time.time()
 
-    while True:
+    while True:  # 🔁 Always recover from errors
         try:
+            subreddit = reddit.subreddit("all")
+            post_stream = subreddit.stream.submissions(pause_after=5)
+
             for post in post_stream:
                 if post is None:
-                    time.sleep(5)  # Pause to avoid 429
+                    time.sleep(5)
                     continue
 
                 if post.id not in SEEN_IDS:
@@ -99,6 +93,7 @@ def main():
                         last_push = now
                     except Exception as e:
                         print(f"❌ Failed to store posts: {e}")
+
         except prawcore.exceptions.TooManyRequests:
             print("⏳ Rate limited during stream. Waiting 60 seconds...")
             time.sleep(60)
