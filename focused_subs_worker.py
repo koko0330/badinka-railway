@@ -28,7 +28,7 @@ SUBREDDITS = [
     "LostLandsMusicFest", "festivals", "avefashion", "avesafe", "EDCOrlando",
     "findfashion", "BassCanyon", "Aerials", "electricdaisycarnival", "bonnaroo",
     "Tomorrowland", "femalefashion", "Soundhaven", "warpedtour", "Shambhala",
-    "Lollapalooza", "EDM", "BeyondWonderland"
+    "Lollapalooza", "EDM", "BeyondWonderland", "kandi"
 ]
 
 subreddit = reddit.subreddit("+".join(SUBREDDITS))
