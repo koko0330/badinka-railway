@@ -6,10 +6,10 @@ import markdown
 from bs4 import BeautifulSoup
 from shared_config import insert_mention
 import prawcore
-
-# ✅ Suppress XMLParsedAsHTMLWarning
 from bs4 import XMLParsedAsHTMLWarning
 import warnings
+import random
+
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 # === Reddit API ===
@@ -29,6 +29,7 @@ SEEN_IDS = set()
 COLLECTED = []
 POST_INTERVAL = 30  # seconds
 
+
 def extract_links(text):
     try:
         html = markdown.markdown(text)
@@ -36,6 +37,7 @@ def extract_links(text):
         return [a.get("href") for a in soup.find_all("a") if a.get("href")]
     except Exception:
         return []
+
 
 def find_brands(text):
     brands_found = set()
@@ -47,6 +49,7 @@ def find_brands(text):
             if pattern.search(link):
                 brands_found.add(brand)
     return list(brands_found)
+
 
 def extract_comment(comment, brand):
     return {
@@ -64,13 +67,18 @@ def extract_comment(comment, brand):
         "brand": brand
     }
 
+
 def stream_worker():
     subreddit = reddit.subreddit("all")
-    comment_stream = subreddit.stream.comments()
+    comment_stream = subreddit.stream.comments(pause_after=5)
 
     last_push = time.time()
 
     for comment in comment_stream:
+        if comment is None:
+            time.sleep(3)  # light pause to avoid rapid cycling
+            continue
+
         try:
             if comment.id not in SEEN_IDS:
                 for brand in find_brands(comment.body):
@@ -78,7 +86,8 @@ def stream_worker():
                     COLLECTED.append(m)
                     SEEN_IDS.add(comment.id)
                     print(f"💬 Comment: {m['permalink']} | Brand: {brand}")
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Failed to process comment: {e}")
             continue
 
         now = time.time()
@@ -91,6 +100,7 @@ def stream_worker():
             except Exception as e:
                 print(f"❌ Failed to store comments: {e}")
 
+
 def main():
     print("🚀 Comment stream worker started...")
 
@@ -100,9 +110,15 @@ def main():
         except prawcore.exceptions.TooManyRequests:
             print("⏳ Rate limited during streaming. Waiting 60 seconds...")
             time.sleep(60)
+        except prawcore.exceptions.ServerError as e:
+            backoff = random.randint(60, 120)
+            print(f"⚠️ Reddit server error (500): {e}. Cooling down for {backoff} seconds...")
+            time.sleep(backoff)
         except Exception as e:
-            print(f"⚠️ Unexpected error in stream loop: {e}")
-            time.sleep(10)
+            backoff = random.randint(20, 45)
+            print(f"⚠️ Unexpected error in stream loop: {e}. Waiting {backoff} seconds before retrying.")
+            time.sleep(backoff)
+
 
 if __name__ == "__main__":
     main()
